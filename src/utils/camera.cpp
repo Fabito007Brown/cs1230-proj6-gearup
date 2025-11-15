@@ -2,6 +2,9 @@
 #include <glm/glm.hpp>
 #include <cmath>
 
+#include <stdexcept>
+
+
 Camera::Camera()
 {
     rebuildView();
@@ -109,3 +112,4 @@ void Camera::rotateAroundRight(float angle)
 
     rebuildView();
 }
+

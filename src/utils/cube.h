@@ -8,7 +8,7 @@
 class Cube
 {
 public:
-    void updateParams(int param1);
+    void updateParams(int param1, int param2);
     std::vector<float> generateShape() { return m_vertexData; }
 
 private:
@@ -25,4 +25,5 @@ private:
 
     std::vector<float> m_vertexData;
     int m_param1;
+    int m_param2;
 };

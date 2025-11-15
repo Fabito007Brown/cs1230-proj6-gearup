@@ -25,10 +25,19 @@ public:
     glm::vec3        getPosition()    const { return m_pos;  }
     glm::vec3        getLook()        const { return m_look; }
 
+
     // Movement hooks (we’ll use these later)
     void translate(const glm::vec3 &delta);
     void rotateAroundUp(float angle);    // yaw
     void rotateAroundRight(float angle); // pitch
+
+    // New for realtime
+
+    glm::mat4 getProjectionMatrix() const { return m_projMatrix; }
+
+
+
+
 
 private:
     // Camera pose
@@ -40,11 +49,19 @@ private:
     glm::mat4 m_view{1.f};
     glm::mat4 m_proj{1.f};
 
+    glm::mat4 m_projMatrix {1.0f};
+    float m_nearPlane = 0.1f;
+    float m_farPlane  = 10.f;
+
     // Stored projection params (for updates)
     float m_aspect   = 1.f;
     float m_near     = 0.1f;
     float m_far      = 10.f;
     float m_fovy     = 0.785398f; // ~45° in radians
+
+    float getHeightAngle() const {
+        return m_fovy;
+    }
 
     void rebuildView();
 };

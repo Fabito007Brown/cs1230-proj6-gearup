@@ -33,81 +33,119 @@ void Realtime::finish() {
 
     // Students: anything requiring OpenGL calls when the program exits should be done here
 
-    if (m_vbo)    glDeleteBuffers(1, &m_vbo);
-    if (m_vao)    glDeleteVertexArrays(1, &m_vao);
+    cleanupVAOs();       // ← ADD THIS
     if (m_shader) glDeleteProgram(m_shader);
 
     this->doneCurrent();
 }
 
-void Realtime::updateCylinderFromSettings() {
-    // Use UI values, but clamp to valid ranges
-    int p1 = std::max(1, settings.shapeParameter1);   // vertical
-    int p2 = std::max(3, settings.shapeParameter2);   // around
 
-    m_cylinder.updateParams(p1, p2);
-    std::vector<float> data = m_cylinder.generateShape();
-    m_vertexCount = static_cast<int>(data.size() / 6);   // 3 pos + 3 normal
 
-    std::cout << "[Realtime] updateCylinderFromSettings: p1="
-              << p1 << " p2=" << p2
-              << " verts=" << m_vertexCount << std::endl;
+void Realtime::loadScene() {
+    cleanupVAOs();
 
-    // Upload new data into existing VBO
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 data.size() * sizeof(float),
-                 data.data(),
-                 GL_STATIC_DRAW);
-    // glBindBuffer(GL_ARRAY_BUFFER, 0);
+    std::string scenePath = settings.sceneFilePath;
+    if (scenePath.empty()) {
+        std::cout << "[Realtime] No scene file selected" << std::endl;
+        return;
+    }
+
+    bool success = SceneParser::parse(scenePath, m_renderData);
+    if (!success) {
+        std::cerr << "[Realtime] Failed to parse scene" << std::endl;
+        return;
+    }
+
+    // Set up camera from scene data
+    glm::vec3 pos = glm::vec3(m_renderData.cameraData.pos);
+    glm::vec3 look = glm::vec3(m_renderData.cameraData.look);
+    glm::vec3 up = glm::vec3(m_renderData.cameraData.up);
+    m_camera.setViewMatrix(pos, look, up);
+
+    float aspect = (size().height() > 0) ? float(size().width()) / float(size().height()) : 1.f;
+    m_camera.setProjectionMatrix(aspect, settings.nearPlane, settings.farPlane,
+                                 m_renderData.cameraData.heightAngle);
+
+    generateShapeVAOs();
+
+    std::cout << "[Realtime] Scene loaded: " << m_renderData.shapes.size()
+              << " shapes, " << m_renderData.lights.size() << " lights" << std::endl;
 }
 
+void Realtime::generateShapeVAOs() {
+    m_shapeVAOs.clear();
 
-void Realtime::initTestShape() {
-    // Compile & link shader program
-    m_shader = ShaderLoader::createShaderProgram(
-        ":/resources/shaders/default.vert",
-        ":/resources/shaders/default.frag"
-        );
-    std::cout << "[Realtime] shader program = " << m_shader << std::endl;
+    for (const RenderShapeData& shape : m_renderData.shapes) {
+        std::vector<float> vertexData = generateShapeData(
+            shape.primitive.type,
+            settings.shapeParameter1,
+            settings.shapeParameter2
+            );
 
-    // Generate CPU mesh from your Cylinder
-    int p1 = std::max(1, settings.shapeParameter1);
-    int p2 = std::max(3, settings.shapeParameter2);
+        ShapeVAO shapeVAO;
+        glGenVertexArrays(1, &shapeVAO.vao);
+        glGenBuffers(1, &shapeVAO.vbo);
 
-    m_cylinder.updateParams(p1, p2);
-    std::vector<float> data = m_cylinder.generateShape();
-    m_vertexCount = static_cast<int>(data.size() / 6); // 3 pos + 3 normal
+        glBindVertexArray(shapeVAO.vao);
+        glBindBuffer(GL_ARRAY_BUFFER, shapeVAO.vbo);
 
-    std::cout << "[Realtime] cylinder vertices = " << m_vertexCount << std::endl;
+        glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float),
+                     vertexData.data(), GL_STATIC_DRAW);
 
-    // Create VAO & VBO
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
+        // Position attribute
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
 
+        // Normal attribute
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+                              (void*)(3 * sizeof(float)));
 
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
 
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-
-    updateCylinderFromSettings();
-
-    // layout(location = 0) vec3 aPos;
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
-                          6 * sizeof(float),
-                          (void*)0);
-
-    // layout(location = 1) vec3 aNor;
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE,
-                          6 * sizeof(float),
-                          (void*)(3 * sizeof(float)));
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+        shapeVAO.vertexCount = vertexData.size() / 6;
+        m_shapeVAOs.push_back(shapeVAO);
+    }
 }
 
+std::vector<float> Realtime::generateShapeData(PrimitiveType type, int param1, int param2) {
+    int p1 = std::max(1, param1);
+    int p2 = std::max(3, param2);
+
+    switch (type) {
+    case PrimitiveType::PRIMITIVE_CUBE: {
+        Cube cube;
+        cube.updateParams(p1, p2);
+        return cube.generateShape();
+    }
+    case PrimitiveType::PRIMITIVE_CONE: {
+        Cone cone;
+        cone.updateParams(p1, p2);
+        return cone.generateShape();
+    }
+    case PrimitiveType::PRIMITIVE_CYLINDER: {
+        Cylinder cylinder;
+        cylinder.updateParams(p1, p2);
+        return cylinder.generateShape();
+    }
+    case PrimitiveType::PRIMITIVE_SPHERE: {
+        Sphere sphere;
+        sphere.updateParams(p1, p2);
+        return sphere.generateShape();
+    }
+    default:
+        return std::vector<float>();
+    }
+}
+
+void Realtime::cleanupVAOs() {
+    for (ShapeVAO& shapeVAO : m_shapeVAOs) {
+        glDeleteBuffers(1, &shapeVAO.vbo);
+        glDeleteVertexArrays(1, &shapeVAO.vao);
+    }
+    m_shapeVAOs.clear();
+}
 
 
 
@@ -117,8 +155,6 @@ void Realtime::initializeGL() {
     m_timer = startTimer(1000/60);
     m_elapsedTimer.start();
 
-    // Initializing GL.
-    // GLEW (GL Extension Wrangler) provides access to OpenGL functions.
     glewExperimental = GL_TRUE;
     GLenum err = glewInit();
     if (err != GLEW_OK) {
@@ -126,66 +162,119 @@ void Realtime::initializeGL() {
     }
     std::cout << "Initialized GL: Version " << glewGetString(GLEW_VERSION) << std::endl;
 
-    // Allows OpenGL to draw objects appropriately on top of one another
     glEnable(GL_DEPTH_TEST);
-    // Tells OpenGL to only draw the front face
     glEnable(GL_CULL_FACE);
-    // Tells OpenGL how big the screen is
     glViewport(0, 0, size().width() * m_devicePixelRatio, size().height() * m_devicePixelRatio);
 
-    // Students: anything requiring OpenGL calls when the program starts should be done here
-
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-    initTestShape();
-
-    // Simple default: eye at (0, 0, 3) looking at origin
-    m_camera.setViewMatrix(
-        glm::vec3(0.f, 0.f, 3.f),   // position
-        glm::vec3(0.f, 0.f, -1.f),  // look direction
-        glm::vec3(0.f, 1.f, 0.f)    // up
+    // Load shader
+    m_shader = ShaderLoader::createShaderProgram(
+        ":/resources/shaders/default.vert",
+        ":/resources/shaders/default.frag"
         );
 
-    // Field of view ~45 degrees (in radians)
-    const float fovY = 45.f * 3.1415926535f / 180.f;
-
-    float aspect = float(size().width()) / float(size().height());
-    m_camera.setProjectionMatrix(
-        aspect,
-        settings.nearPlane,
-        settings.farPlane,
-        fovY
-        );
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 }
 
 
-
 void Realtime::paintGL() {
-    // Students: anything requiring OpenGL calls every frame should be done here
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (!m_shader || !m_vao || m_vertexCount == 0) {
-        return;
-    }
+    if (!m_shader) return;
 
     glUseProgram(m_shader);
-    glBindVertexArray(m_vao);
 
-    // For now, model = identity (cylinder at origin)
-    glm::mat4 model(1.f);
+
     glm::mat4 view = m_camera.getViewMatrix();
     glm::mat4 proj = m_camera.getProjMatrix();
 
-    GLint modelLoc = glGetUniformLocation(m_shader, "model");
-    GLint viewLoc  = glGetUniformLocation(m_shader, "view");
-    GLint projLoc  = glGetUniformLocation(m_shader, "proj");
+    GLint viewLoc = glGetUniformLocation(m_shader, "view");
+    GLint projLoc = glGetUniformLocation(m_shader, "proj");
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, &proj[0][0]);
 
-    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
-    glUniformMatrix4fv(viewLoc,  1, GL_FALSE, &view[0][0]);
-    glUniformMatrix4fv(projLoc,  1, GL_FALSE, &proj[0][0]);
+    // --- camera position ---
+    GLint camPosLoc = glGetUniformLocation(m_shader, "camPos");
+    glm::vec3 camPos = m_camera.getPosition();
+    glUniform3fv(camPosLoc, 1, &camPos[0]);
 
-    glDrawArrays(GL_TRIANGLES, 0, m_vertexCount);
+    // --- global coefficients ---
+    const SceneGlobalData &G = m_renderData.globalData;
+    glUniform1f(glGetUniformLocation(m_shader, "k_a"), G.ka);
+    glUniform1f(glGetUniformLocation(m_shader, "k_d"), G.kd);
+    glUniform1f(glGetUniformLocation(m_shader, "k_s"), G.ks);
 
-    glBindVertexArray(0);
+
+    // --- lights ---
+    int numLights = std::min<int>(m_renderData.lights.size(), 8);
+    glUniform1i(glGetUniformLocation(m_shader, "numLights"), numLights);
+
+    for (int i = 0; i < numLights; ++i) {
+        const SceneLightData &L = m_renderData.lights[i];
+
+        // type: 0 point, 1 directional, 2 spot
+        int typeInt = 0;
+        if (L.type == LightType::LIGHT_DIRECTIONAL) typeInt = 1;
+        else if (L.type == LightType::LIGHT_SPOT)  typeInt = 2;
+
+        // build uniform names like "lights[0].pos"
+        auto loc = [&](const std::string &field) {
+            std::string name = "lights[" + std::to_string(i) + "]." + field;
+            return glGetUniformLocation(m_shader, name.c_str());
+        };
+
+        glUniform1i(loc("type"), typeInt);
+        glUniform3fv(loc("color"), 1, &glm::vec3(L.color)[0]);
+        glUniform3fv(loc("pos"),   1, &glm::vec3(L.pos)[0]);
+        glUniform3fv(loc("dir"),   1, &glm::vec3(L.dir)[0]);
+        glUniform3fv(loc("atten"), 1, &glm::vec3(L.function)[0]);
+        glUniform1f(loc("angle"),      L.angle);
+        glUniform1f(loc("penumbra"),   L.penumbra);
+    }
+
+    // --- single point light: use first light in the scene ---
+    GLint lightPosLoc   = glGetUniformLocation(m_shader, "lightPos");
+    GLint lightColorLoc = glGetUniformLocation(m_shader, "lightColor");
+
+    glm::vec3 lightPos(5.f, 5.f, 5.f);
+    glm::vec3 lightCol(1.f, 1.f, 1.f);
+
+    if (!m_renderData.lights.empty()) {
+        const SceneLightData &L0 = m_renderData.lights[0];
+        // Assuming pos and color are vec4s in SceneLightData:
+        lightPos = glm::vec3(L0.pos);
+        lightCol = glm::vec3(L0.color);
+    }
+
+    glUniform3fv(lightPosLoc,   1, &lightPos[0]);
+    glUniform3fv(lightColorLoc, 1, &lightCol[0]);
+
+
+    for (size_t i = 0; i < m_renderData.shapes.size(); i++) {
+        const RenderShapeData &shape = m_renderData.shapes[i];
+        const ShapeVAO &vao = m_shapeVAOs[i];
+
+        // model matrix
+        GLint modelLoc = glGetUniformLocation(m_shader, "model");
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &shape.ctm[0][0]);
+
+        // material
+        const SceneMaterial &mat = shape.primitive.material;
+
+        glm::vec3 cA = glm::vec3(mat.cAmbient);
+        glm::vec3 cD = glm::vec3(mat.cDiffuse);
+        glm::vec3 cS = glm::vec3(mat.cSpecular);
+
+        glUniform3fv(glGetUniformLocation(m_shader, "cAmbient"),  1, &cA[0]);
+        glUniform3fv(glGetUniformLocation(m_shader, "cDiffuse"),  1, &cD[0]);
+        glUniform3fv(glGetUniformLocation(m_shader, "cSpecular"), 1, &cS[0]);
+        glUniform1f(glGetUniformLocation(m_shader, "shininess"),  mat.shininess);
+
+        // draw
+        glBindVertexArray(vao.vao);
+        glDrawArrays(GL_TRIANGLES, 0, vao.vertexCount);
+        glBindVertexArray(0);
+    }
+
     glUseProgram(0);
 }
 
@@ -208,69 +297,35 @@ void Realtime::resizeGL(int w, int h) {
 }
 
 void Realtime::sceneChanged() {
-
-    // Called when the user clicks "Upload Scene File" and picks a JSON.
-    makeCurrent();  // we might later do GL work here
-
-    if (settings.sceneFilePath.empty()) {
-        std::cout << "[Realtime] sceneChanged: no scene file selected\n";
-        doneCurrent();
-        return;
-    }
-
-    RenderData newData;
-    bool ok = SceneParser::parse(settings.sceneFilePath, newData);
-    if (!ok) {
-        std::cerr << "[Realtime] Failed to parse scene file: "
-                  << settings.sceneFilePath << std::endl;
-        doneCurrent();
-        return;
-    }
-
-    // Store it
-    m_renderData = std::move(newData);
-
-    std::cout << "[Realtime] Scene parsed:\n"
-              << "  shapes = " << m_renderData.shapes.size() << "\n"
-              << "  lights = " << m_renderData.lights.size() << std::endl;
-
-    // ---- Update camera from scene file ----
-    const SceneCameraData &cam = m_renderData.cameraData;
-
-    // SceneCameraData stores vec4; we only need xyz
-    glm::vec3 pos  = glm::vec3(cam.pos);
-    glm::vec3 look = glm::vec3(cam.look);
-    glm::vec3 up   = glm::vec3(cam.up);
-
-    m_camera.setViewMatrix(pos, look, up);
-
-    float aspect =
-        (size().height() > 0)
-            ? float(size().width()) / float(size().height())
-            : 1.f;
-
-    // cam.heightAngle is already in radians
-    m_camera.setProjectionMatrix(
-        aspect,
-        settings.nearPlane,
-        settings.farPlane,
-        cam.heightAngle
-        );
-
+    makeCurrent();
+    loadScene();
     doneCurrent();
+    update();
 
-    update(); // triggers paintGL
+
 }
 
+
+// NEAR PLANE + FAR PLANE
+// NEAR PLANE should chop off front
 void Realtime::settingsChanged() {
 
     makeCurrent();
 
-    if (m_vbo != 0) {
-        updateCylinderFromSettings();
+    if (!m_renderData.shapes.empty()) {
+        generateShapeVAOs();
     }
 
-    update(); // asks for a PaintGL() call to occur
+    float aspect = float(size().width()) / float(size().height());
+    float fovY = !m_renderData.shapes.empty()
+                     ? m_renderData.cameraData.heightAngle
+                     : 45.f * 3.1415926535f / 180.f;
+
+    m_camera.setProjectionMatrix(aspect, settings.nearPlane, settings.farPlane, fovY);
+
+    doneCurrent();
+    update();
+
 }
 
 // ================== Camera Movement!

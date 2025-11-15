@@ -6,9 +6,10 @@ static inline void pushPosNorm(std::vector<float> &dst,
     dst.push_back(n.x); dst.push_back(n.y); dst.push_back(n.z);
 }
 
-void Cube::updateParams(int param1) {
+void Cube::updateParams(int param1, int param2) {
     m_vertexData = std::vector<float>();
     m_param1 = param1;
+    m_param2 = param2;
     setVertexData();
 }
 
