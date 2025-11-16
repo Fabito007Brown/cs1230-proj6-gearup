@@ -87,9 +87,39 @@ Paste your output on top of this comment!
 -->
 
 ### Design Choices
+- Pipeline Structure & Code Reuse: I built on top of the existing architecture from previous labs. The tessellation code for cube, cone, cylinder, and sphere, as well as the scene parsing logic, were reused and integrated into the realtime OpenGL pipeline.
+- Shaders & Phong Lighing: Lighting was computed fully in the fragment shader using our the Phong implementation. Ambient, diffuse, and specular terms were handled manually and recomputed per light. 
+- Lights: Instead of using a singular specific light type, I implemented a generalized upload system that supports eight lights of mixed types (directional, point, spot). This made the shader flexible and able to match the scene files and test cases.
+- Camera implementation: The projection matrix follows class formulas, and camera movement is based on recreated basis vectors. For rotation I used Rodrigues-style rotation and vector math.
 
-### Collaboration/References
+
+## Collaboration/References
+- Relied heavily on lectures
+- Used code from labs 4, 8, 10 in this project
+- I used ChatGPT (OpenAI, GPT-5, 2025) as a debugging/explanation tool for this project
+
+    Specifically, ChatGPT I used it to:
+    
+    - Help translate shader math and camera rotation formulas from lecture into GLSL/C++ code. 
+    - Debug VAO/VBO mistmatches
+    - understand and design pseudocode for camera movement and rotations
+    - pass in code from other labs to this project correctly
+    - Debug shapes position (frag file affected). For some reason my shapes were appearing at a weird angle.
+    
+    Types of Prompts:
+    - Explain shader error why is nothing appearing being colored in 
+    - Help me implement camera movement
+    - lets test the setup with one shape first 
+    - (Once i got stuck moving from hard coded shape to all shaoes) Help me figure out why my other shapes aren't appearing bt my cylinder is.
+    
+    Code areas influenced:
+    - Shader files more specifically diffuse/phong part of frag. 
+    - camera movement within Realtime.cpp
+    - help with rotation 
+    
 
 ### Known Bugs
+N/A
 
 ### Extra Credit
+N/A

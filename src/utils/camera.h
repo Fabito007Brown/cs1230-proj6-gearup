@@ -12,8 +12,7 @@ public:
                        const glm::vec3 &look,
                        const glm::vec3 &up);
 
-    // Build perspective projection (NO glm::perspective)
-    // heightAngle is in radians.
+
     void setProjectionMatrix(float aspectRatio,
                              float nearPlane,
                              float farPlane,
@@ -26,12 +25,10 @@ public:
     glm::vec3        getLook()        const { return m_look; }
 
 
-    // Movement hooks (we’ll use these later)
+    // Movement hooks
     void translate(const glm::vec3 &delta);
     void rotateAroundUp(float angle);    // yaw
     void rotateAroundRight(float angle); // pitch
-
-    // New for realtime
 
     glm::mat4 getProjectionMatrix() const { return m_projMatrix; }
 
@@ -57,7 +54,7 @@ private:
     float m_aspect   = 1.f;
     float m_near     = 0.1f;
     float m_far      = 10.f;
-    float m_fovy     = 0.785398f; // ~45° in radians
+    float m_fovy     = 0.785398f; //45° in radians
 
     float getHeightAngle() const {
         return m_fovy;

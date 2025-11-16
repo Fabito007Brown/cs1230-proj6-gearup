@@ -16,7 +16,7 @@ void main() {
     vec4 worldPosition = model * vec4(position, 1.0);
     wsPosition = worldPosition.xyz;
 
-    // World-space normal (no need to normalize here, but it's fine if you do)
+    // World-space normal
     wsNormal = mat3(model) * normal;
 
     // Clip-space position

@@ -6,8 +6,10 @@
 #include <iostream>
 
 
-// ---------- helpers: Transform → mat4 ----------
 
+
+
+//I USED THESE IN LAB 4!SO THEYRE OKAY
 static glm::mat4 toMat(const SceneTransformation* t) {
     switch (t->type) {
     case TransformationType::TRANSFORMATION_TRANSLATE:
@@ -28,7 +30,6 @@ static glm::mat4 toMat(const SceneTransformation* t) {
     return glm::mat4(1.f);
 }
 
-// ---------- helpers: build a SceneLightData from a SceneLight + CTM ----------
 
 static SceneLightData makeLight(const SceneLight* L, const glm::mat4 &CTM) {
     SceneLightData out{};
@@ -56,7 +57,6 @@ static SceneLightData makeLight(const SceneLight* L, const glm::mat4 &CTM) {
     return out;
 }
 
-// ---------- helpers: traverse scene graph and fill RenderData ----------
 
 static void traverse(const SceneNode* node,
                      const glm::mat4 &parentCTM,
@@ -68,7 +68,7 @@ static void traverse(const SceneNode* node,
         M = M * toMat(t);
     }
 
-    // primitives → RenderShapeData
+    // primitives
     for (const ScenePrimitive* p : node->primitives) {
         RenderShapeData rs{};
         rs.primitive = *p;   // copy primitive data
@@ -76,7 +76,7 @@ static void traverse(const SceneNode* node,
         out.shapes.push_back(rs);
     }
 
-    // lights → SceneLightData
+    // lights
     for (const SceneLight* L : node->lights) {
         out.lights.push_back(makeLight(L, M));
     }
@@ -110,7 +110,7 @@ bool SceneParser::parse(std::string filepath, RenderData &renderData) {
         traverse(root, glm::mat4(1.f), renderData);
     }
 
-    // optional debug:
+    // for debug:
     std::cout << "[SceneParser] Parsed scene \""
               << filepath << "\"\n"
               << "  shapes = " << renderData.shapes.size() << "\n"

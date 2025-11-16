@@ -20,26 +20,6 @@ void Camera::setViewMatrix(const glm::vec3 &pos,
     rebuildView();
 }
 
-// void Camera::rebuildView()
-// {
-//     // Build camera basis
-//     glm::vec3 w = -glm::normalize(m_look);        // forward (camera space +z)
-//     glm::vec3 u = glm::normalize(glm::cross(m_up, w)); // right
-//     glm::vec3 v = glm::cross(w, u);               // true up
-
-//     glm::mat4 V(1.f);
-
-//     // Columns because GLM is column-major
-//     V[0] = glm::vec4(u, 0.f);
-//     V[1] = glm::vec4(v, 0.f);
-//     V[2] = glm::vec4(w, 0.f);
-//     V[3] = glm::vec4(-glm::dot(u, m_pos),
-//                      -glm::dot(v, m_pos),
-//                      -glm::dot(w, m_pos),
-//                      1.f);
-
-//     m_view = V;
-// }
 
 void Camera::rebuildView()
 {
@@ -55,7 +35,7 @@ void Camera::rebuildView()
     rot[1] = glm::vec4(u.y, v.y, w.y, 0.f);
     rot[2] = glm::vec4(u.z, v.z, w.z, 0.f);
 
-    // Translation part
+    // Translation
     glm::mat4 trans(1.f);
     trans[3] = glm::vec4(-m_pos, 1.f);
 

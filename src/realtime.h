@@ -13,7 +13,7 @@
 #include <QTime>
 #include <QTimer>
 
-#include <algorithm>          // for std::max
+#include <algorithm>
 #include "cube.h"
 #include "cone.h"
 #include "sphere.h"
@@ -59,10 +59,10 @@ private:
     glm::vec2 m_prev_mouse_pos;                         // Stores mouse position
     std::unordered_map<Qt::Key, bool> m_keyMap;         // Stores whether keys are pressed or not
 
-    // Device Correction Variables
+
     double m_devicePixelRatio;
 
-    GLuint m_shader = 0;   // shader program
+    GLuint m_shader = 0;
 
     struct ShapeVAO {
         GLuint vao;
@@ -83,6 +83,9 @@ private:
 
 
     Camera m_camera;
+    glm::vec3 m_camPos  = glm::vec3(0.f, 0.f, 5.f);
+    glm::vec3 m_camLook = glm::vec3(0.f, 0.f, -1.f);
+    glm::vec3 m_camUp   = glm::vec3(0.f, 1.f, 0.f);
 
     // Parsed scene data from lab 4
     RenderData m_renderData;

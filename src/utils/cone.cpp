@@ -11,7 +11,6 @@ static inline void pushPosNorm(std::vector<float>& dst,
     dst.push_back(n.x); dst.push_back(n.y); dst.push_back(n.z);
 }
 
-// Provided in the handout: normal of the *implicit* cone at a point.
 static inline glm::vec3 calcNorm(const glm::vec3& pt) {
     float xNorm = 2.f * pt.x;
     float yNorm = -(1.f/4.f) * (2.f * pt.y - 1.f);
@@ -19,8 +18,6 @@ static inline glm::vec3 calcNorm(const glm::vec3& pt) {
     return glm::normalize(glm::vec3{xNorm, yNorm, zNorm});
 }
 
-// Cylindrical → Cartesian on a horizontal plane y = const.
-// (Handout’s equations for the cap: x = r cos θ, z = r sin θ)
 static inline glm::vec3 cyl(float r, float theta, float y) {
     return glm::vec3(r * std::cos(theta), y, r * std::sin(theta));
 }
@@ -53,7 +50,6 @@ void Cone::makeCapSlice(float theta0, float theta1) {
         glm::vec3 O0 = cyl(r1, theta0, y);
         glm::vec3 O1 = cyl(r1, theta1, y);
 
-        // Front-facing when viewed from ABOVE (flip winding):
         // Triangle A: I0 -> O0 -> O1
         pushPosNorm(m_vertexData, I0, nCap);
         pushPosNorm(m_vertexData, O0, nCap);

@@ -18,24 +18,22 @@ uniform vec3  cDiffuse;
 uniform vec3  cSpecular;
 uniform float shininess;
 
-// -------- Camera (world-space) --------
+// camera world space
 uniform vec3 camPos;
 
-// -------- Light description --------
+// light description
 struct Light {
     int   type;      // 0 = point, 1 = directional, 2 = spot
     vec3  color;
     vec3  pos;
     vec3  dir;
-    vec3  atten;     // (a, b, c)
-    float angle;     // outer cone angle
+    vec3  atten;
+    float angle;
     float penumbra;  // outer - inner
 };
 
 uniform int   numLights;
 uniform Light lights[8];
-
-// ================= helpers =================
 
 // 1 / (a + b d + c d^2), clamped to [0,1]
 float distanceFalloff(vec3 coeffs, float d) {
@@ -57,12 +55,9 @@ float spotFalloff(float angleToAxis, float outerAngle, float penumbra) {
     if (angleToAxis >= outer) return 0.0;
 
     float t  = (angleToAxis - inner) / (outer - inner);
-    float t2 = t * t;
-    float t3 = t2 * t;
 
-    // smoothstep-ish 3t^2 - 2t^3, then invert
-    float s = 3.0 * t2 - 2.0 * t3;
-    return 1.0 - s;
+    float falloff = 3.0 * t * t - 2.0 * t * t *t;
+    return 1.0 - falloff;
 }
 
 // Diffuse + specular from one light
@@ -77,7 +72,7 @@ vec3 shadeOneLight(Light light, vec3 N, vec3 P, vec3 V) {
         L = disp / dist;
         attenuation = distanceFalloff(light.atten, dist);
     } else if (light.type == 1) {
-        // directional (dir is light -> scene)
+        // directional
         L = normalize(-light.dir);
         attenuation = 1.0;
     } else {
@@ -112,7 +107,7 @@ vec3 shadeOneLight(Light light, vec3 N, vec3 P, vec3 V) {
     return attenuation * (diffuse + specular);
 }
 
-// ================= main =================
+// MAIN
 
 void main() {
     vec3 N = normalize(wsNormal);

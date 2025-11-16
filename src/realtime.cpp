@@ -33,7 +33,7 @@ void Realtime::finish() {
 
     // Students: anything requiring OpenGL calls when the program exits should be done here
 
-    cleanupVAOs();       // ← ADD THIS
+    cleanupVAOs();
     if (m_shader) glDeleteProgram(m_shader);
 
     this->doneCurrent();
@@ -58,14 +58,27 @@ void Realtime::loadScene() {
 
     // Set up camera from scene data
     m_camera.setViewMatrix(
-        glm::vec3(m_renderData.cameraData.pos),    // Extract vec3 from vec4
-        glm::vec3(m_renderData.cameraData.look),   // Extract vec3 from vec4
-        glm::vec3(m_renderData.cameraData.up)      // Extract vec3 from vec4
+        glm::vec3(m_renderData.cameraData.pos),
+        glm::vec3(m_renderData.cameraData.look),
+        glm::vec3(m_renderData.cameraData.up)
         );
 
     float aspect = (size().height() > 0) ? float(size().width()) / float(size().height()) : 1.f;
     m_camera.setProjectionMatrix(aspect, settings.nearPlane, settings.farPlane,
                                  m_renderData.cameraData.heightAngle);
+
+    glm::vec3 pos  = glm::vec3(m_renderData.cameraData.pos);
+    glm::vec3 look = glm::vec3(m_renderData.cameraData.look);
+    glm::vec3 up   = glm::vec3(m_renderData.cameraData.up);
+
+    // Save camera state
+    m_camPos  = pos;
+    m_camLook = look;
+    m_camUp   = up;
+
+    m_camera.setViewMatrix(m_camPos, m_camLook, m_camUp);
+
+
 
     generateShapeVAOs();
 
@@ -195,8 +208,7 @@ void Realtime::paintGL() {
 
     // --- camera position ---
     GLint camPosLoc = glGetUniformLocation(m_shader, "camPos");
-    glm::vec3 camPos = m_camera.getPosition();
-    glUniform3fv(camPosLoc, 1, &camPos[0]);
+    glUniform3fv(camPosLoc, 1, &m_camPos[0]);
 
     // --- global coefficients ---
     const SceneGlobalData &G = m_renderData.globalData;
@@ -212,12 +224,12 @@ void Realtime::paintGL() {
     for (int i = 0; i < numLights; ++i) {
         const SceneLightData &L = m_renderData.lights[i];
 
-        // type: 0 point, 1 directional, 2 spot
+        // 0 point, 1 directional, 2 spot
         int typeInt = 0;
         if (L.type == LightType::LIGHT_DIRECTIONAL) typeInt = 1;
         else if (L.type == LightType::LIGHT_SPOT)  typeInt = 2;
 
-        // build uniform names like "lights[0].pos"
+
         auto loc = [&](const std::string &field) {
             std::string name = "lights[" + std::to_string(i) + "]." + field;
             return glGetUniformLocation(m_shader, name.c_str());
@@ -232,7 +244,7 @@ void Realtime::paintGL() {
         glUniform1f(loc("penumbra"),   L.penumbra);
     }
 
-    // --- single point light: use first light in the scene ---
+    // single point light: use first light in the scene
     GLint lightPosLoc   = glGetUniformLocation(m_shader, "lightPos");
     GLint lightColorLoc = glGetUniformLocation(m_shader, "lightColor");
 
@@ -241,7 +253,6 @@ void Realtime::paintGL() {
 
     if (!m_renderData.lights.empty()) {
         const SceneLightData &L0 = m_renderData.lights[0];
-        // Assuming pos and color are vec4s in SceneLightData:
         lightPos = glm::vec3(L0.pos);
         lightCol = glm::vec3(L0.color);
     }
@@ -333,6 +344,23 @@ void Realtime::settingsChanged() {
 
 // ================== Camera Movement!
 
+// Helper to rotate vector v around (normalized) axis by angle (radians)
+//based on rodrigues
+static glm::vec3 rotateAroundAxis(const glm::vec3 &v,
+                                  const glm::vec3 &axis,
+                                  float angle)
+{
+    glm::vec3 a = glm::normalize(axis);
+    float c = std::cos(angle);
+    float s = std::sin(angle);
+
+    // Rodrigues' rotation formula
+    return v * c
+           + glm::cross(a, v) * s
+           + a * glm::dot(a, v) * (1.f - c);
+}
+
+
 void Realtime::keyPressEvent(QKeyEvent *event) {
     m_keyMap[Qt::Key(event->key())] = true;
 }
@@ -362,9 +390,37 @@ void Realtime::mouseMoveEvent(QMouseEvent *event) {
         int deltaY = posY - m_prev_mouse_pos.y;
         m_prev_mouse_pos = glm::vec2(posX, posY);
 
-        // Use deltaX and deltaY here to rotate
+        if (m_mouseDown) {
+            const float sensitivity = 0.005f; // radians per pixel
 
-        update(); // asks for a PaintGL() call to occur
+            float yaw   = -deltaX * sensitivity; // left/right
+            float pitch = -deltaY * sensitivity; // up/down
+
+            glm::vec3 worldUp(0.f, 1.f, 0.f);
+
+            // to rotate around world up
+            if (yaw != 0.f) {
+                m_camLook = rotateAroundAxis(m_camLook, worldUp, yaw);
+                m_camUp   = rotateAroundAxis(m_camUp,   worldUp, yaw);
+            }
+
+            // recompute right after yaw
+            glm::vec3 right = glm::normalize(glm::cross(m_camLook, m_camUp));
+
+            // to rotate around camera's right axis
+            if (pitch != 0.f) {
+                m_camLook = rotateAroundAxis(m_camLook, right, pitch);
+                m_camUp   = rotateAroundAxis(m_camUp,   right, pitch);
+            }
+
+            // Re-orthonormalize basis
+            m_camLook = glm::normalize(m_camLook);
+            right     = glm::normalize(glm::cross(m_camLook, m_camUp));
+            m_camUp   = glm::normalize(glm::cross(right, m_camLook));
+
+            m_camera.setViewMatrix(m_camPos, m_camLook, m_camUp);
+            update();
+        }
     }
 }
 
@@ -375,7 +431,37 @@ void Realtime::timerEvent(QTimerEvent *event) {
 
     // Use deltaTime and m_keyMap here to move around
 
-    update(); // asks for a PaintGL() call to occur
+    const float speed = 5.f; // world units per second
+
+    glm::vec3 forward = glm::normalize(m_camLook);
+    glm::vec3 right   = glm::normalize(glm::cross(forward, m_camUp));
+    glm::vec3 worldUp(0.f, 1.f, 0.f);
+
+    glm::vec3 moveDir(0.f);
+
+    // W/S: along look direction
+    if (m_keyMap[Qt::Key_W]) moveDir += forward;
+    if (m_keyMap[Qt::Key_S]) moveDir -= forward;
+
+    // A/D: strafe left/right
+    if (m_keyMap[Qt::Key_D]) moveDir += right;
+    if (m_keyMap[Qt::Key_A]) moveDir -= right;
+
+    // Space / Ctrl: vertical in world space
+    if (m_keyMap[Qt::Key_Space])   moveDir += worldUp;
+    if (m_keyMap[Qt::Key_Control]) moveDir -= worldUp;
+
+    if (glm::length(moveDir) > 0.f) {
+        moveDir = glm::normalize(moveDir);
+        m_camPos += moveDir * speed * deltaTime;
+
+        // Push updated camera to Camera object
+        m_camera.setViewMatrix(m_camPos, m_camLook, m_camUp);
+    }
+
+    update();
+
+
 }
 
 // DO NOT EDIT
