@@ -177,6 +177,28 @@ Thumbs.db
 *.dll
 *.exe
 
+# Build directories
+build/
+cmake-build-debug/
+cmake-build-release/
+CMakeFiles/
+CMakeCache.txt
+
+# Qt Creator / IDE files
+*.pro.user
+*.creator.user
+*.user
+.idea/
+.vscode/
+.vs/
+
+# Mac junk
+.DS_Store
+
+# Other generated stuff
+student_outputs/
+
+
 build
 
 .idea
