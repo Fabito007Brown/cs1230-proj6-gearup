@@ -53,36 +53,21 @@ https://github.com/user-attachments/assets/cfc5ec84-2907-487b-9be0-92a68ab7454e
 
 
 ### Design Choices
-- Pipeline Structure & Code Reuse: I built on top of the existing architecture from previous labs. The tessellation code for cube, cone, cylinder, and sphere, as well as the scene parsing logic, were reused and integrated into the realtime OpenGL pipeline.
-- Shaders & Phong Lighing: Lighting was computed fully in the fragment shader using our the Phong implementation. Ambient, diffuse, and specular terms were handled manually and recomputed per light. 
-- Lights: Instead of using a singular specific light type, I implemented a generalized upload system that supports eight lights of mixed types (directional, point, spot). This made the shader flexible and able to match the scene files and test cases.
-- Camera implementation: The projection matrix follows class formulas, and camera movement is based on recreated basis vectors. For rotation I used Rodrigues-style rotation and vector math.
+- Realtime Snake Arena: I designed the project as a 3D, Minecraft-style snake game to demonstrate procedural content generation and physically-inspired motion. The player controls a rigid-body cube snake moving inside an arena with collision-driven gameplay (walls, terrain, food).
+- Procedural Terrain & World Building: The arena and long path beyond the opening gate are generated algorithmically using noise-based heightfields and cube instancing.
+    - L-system logic produces tree-like structures along the path to create visual life and variation without manual modeling.
+- Per-pixel lighting and advanced shading: Path bricks use tangent-space normal mapping to bring out surface depth from texture detail.
+    - The grassy floor uses bump mapping (height-based normals) to simulate uneven ground and break the flat polygon look.
+- Dynamic Gameplay Systems: Snake movement is implemented as a rigid-body controller with direction forces and collision response.    
+    - Eating food dynamically grows the snake using instanced body cubes
+- Cinematic Camera Behavior: A high third-person fixed camera gives a dramatic reveal of the arena.
+    - A follow-camera mode was added to track the player during movement
 
 
 ## Collaboration/References
-- Relied heavily on lectures
-- Used code from labs 4, 8, 10 in this project
-- I used ChatGPT (OpenAI, GPT-5, 2025) as a debugging/explanation tool for this project
-
-    Specifically, ChatGPT I used it to:
-    
-    - Help translate shader math and camera rotation formulas from lecture into GLSL/C++ code. 
-    - Debug VAO/VBO mistmatches
-    - understand and design pseudocode for camera movement and rotations
-    - pass in code from other labs to this project correctly
-    - Debug shapes position (frag file affected). For some reason my shapes were appearing at a weird angle.
-    
-    Types of Prompts:
-    - Explain shader error why is nothing appearing being colored in 
-    - Help me implement camera movement
-    - lets test the setup with one shape first 
-    - (Once i got stuck moving from hard coded shape to all shaoes) Help me figure out why my other shapes aren't appearing bt my cylinder is.
-    
-    Code areas influenced:
-    - Shader files more specifically diffuse/phong part of frag. 
-    - camera movement within Realtime.cpp
-    - help with rotation 
-    
+- Relied heavily on online content on L-systems, physics, normal mapping, and bump mapping
+- Used code mainly from project 5 for this project.
+- I used ChatGPT (OpenAI, GPT-5, 2025) as a debugging/explanation/boilerplate tool for this project
 
 ### Known Bugs
 N/A

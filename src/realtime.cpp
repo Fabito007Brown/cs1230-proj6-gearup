@@ -277,8 +277,7 @@ void Realtime::initializeGL() {
     glClearColor(0.7f, 0.9f, 1.0f, 1.f); // soft sky blue
 
 
-    // === Stage 1: generate a flat voxel arena ===
-    // --- Crossy-Road style isometric-ish camera ---
+    // --- Crossy-Road style camera ---
     m_camPos  = glm::vec3(15.f, 20.f, 15.f);           // up and off to the side
     m_camLook = glm::normalize(glm::vec3(0.f) - m_camPos); // look toward origin
     m_camUp   = glm::vec3(0.f, 1.f, 0.f);              // world up
@@ -329,7 +328,6 @@ GLuint Realtime::loadTexture2D(const QString &path)
         return 0;
     }
 
-    // Convert to RGBA8888 and flip vertically so it matches OpenGL's origin
     QImage glImg = img.convertToFormat(QImage::Format_RGBA8888).mirrored();
 
     GLuint tex = 0;
@@ -649,7 +647,7 @@ void Realtime::cleanupTerrain() {
     m_terrainVertexCount = 0;
 }
 
-// =================== CUBE MESH + ARENA LAYOUT ===================
+// CUBE MESH + ARENA LAYOUT
 
 void Realtime::generateCubeMesh() {
     cleanupCubeMesh();
@@ -726,7 +724,7 @@ bool Realtime::cellBlocked(int gx, int gz) const {
 void Realtime::buildArenaLayout() {
     m_cubes.clear();
 
-    // Our terrain is size = 20.f, centered at origin => half extent = 10
+    // Our terrain is size = 20.f, centered at origin -> half extent = 10
     const float half       = 10.f;
     const float wallHeight = 2.f;   // a bit taller than the snake will be
     const float unit       = 1.f;   // cube size along x/z
@@ -766,7 +764,7 @@ void Realtime::buildArenaLayout() {
     };
 
     const float centerClearRadius = 4.0f;  // always flat zone where snake can live
-    const float spawnProbability  = 0.45f; // ~45% of tiles get a column
+    const float spawnProbability  = 0.45f; // 45% of tiles get a column
 
     for (int gz = -9; gz <= 9; ++gz) {
         for (int gx = -9; gx <= 9; ++gx) {
@@ -822,20 +820,20 @@ void Realtime::buildInitialPathStrip() {
 
 
     // Build a straight strip going in -Z direction starting just outside the door
-    int zStart = m_pathStartZ;                 // e.g. -11
-    int zEnd   = m_pathStartZ - m_pathLengthZ; // e.g. -51
+    int zStart = m_pathStartZ;
+    int zEnd   = m_pathStartZ - m_pathLengthZ;
 
     for (int gz = zStart; gz >= zEnd; --gz) {
         for (int gx = -10; gx <= 10; ++gx) {
-            // Inside walkable path (center strip)  ---> material 1 (normal-mapped bricks)
+            // Inside walkable path (center strip) ->  material 1 (normal-mapped bricks)
             if (std::abs(gx) <= halfWidth) {
                 addCube(float(gx), floorH, float(gz), pathColor, /*material=*/1);
             }
-            // stone borders (no normal map)       ---> material 0
+            // stone borders (no normal map) -> material 0
             else if (std::abs(gx) == int(halfWidth) + 1) {
                 addCube(float(gx), floorH + 0.6f, float(gz), edgeStone, /*material=*/0);
             }
-            // foliage / trees (no normal map)     ---> material 0
+            // foliage / trees (no normal map -> material 0
             else if (std::abs(gx) > int(halfWidth) + 1) {
                 float v = std::sin(gx * 12.9898f + gz * 78.233f) * 43758.5453f;
                 float r = v - std::floor(v);
@@ -848,7 +846,7 @@ void Realtime::buildInitialPathStrip() {
         }
     }
 
-    // Add L-system “trees / bushes” along both sides of the path
+    // Add L-system bushes along both sides of the path
     generateLSystemFoliageStrip(zStart, zEnd, /*leftSide=*/true);
     generateLSystemFoliageStrip(zStart, zEnd, /*leftSide=*/false);
 }
@@ -864,7 +862,7 @@ void Realtime::buildNormalMapTestScene() {
     inst.pos      = glm::vec3(0.f, 0.f, 0.f);
     inst.scale    = glm::vec3(4.f, 4.f, 4.f); // nice big cube
     inst.color    = glm::vec3(1.f, 1.f, 1.f); // white so brick texture shows clearly
-    inst.material = MAT_PATH;                 // <-- uses brick diffuse + normal map
+    inst.material = MAT_PATH;                 // uses brick diffuse + normal map
     m_cubes.push_back(inst);
 
     // Turn off snake follow so camera doesn't get overridden
@@ -1375,9 +1373,7 @@ void Realtime::timerEvent(QTimerEvent *event) {
     float deltaTime = elapsedms * 0.001f;
     m_elapsedTimer.restart();
 
-    // =========================
-    // 1) Snake update (only if ALIVE)
-    // =========================
+    //snake update
     if (!m_snakeDead) {
         // --- 1a) Integrate phsyics motion ---
         // Forces
@@ -1451,18 +1447,14 @@ void Realtime::timerEvent(QTimerEvent *event) {
             }
         }
     } else {
-        // =========================
-        // Snake is DEAD -> play squash, then respawn
-        // =========================
+        //dead snake animation
         m_snakeDeathTime += deltaTime;
         if (m_snakeDeathTime > 0.6f) {   // same timing as your squash in paintGL
             resetSnake();                // puts snake back in center + clears body + food
         }
     }
 
-    // =========================
-    // 2) Door timer / path generation (ALWAYS runs)
-    // =========================
+    //door timer
     if (!m_doorOpened) {
         m_doorTimer += deltaTime;
         if (m_doorTimer >= m_doorOpenDelay) {
@@ -1472,9 +1464,7 @@ void Realtime::timerEvent(QTimerEvent *event) {
         }
     }
 
-    // =========================
-    // 3) Optional: camera follow
-    // =========================
+    //camera follow
     if (m_followSnake) {
         m_camPos  = m_snake.pos + m_camOffsetFromSnake;
         m_camLook = glm::normalize(-m_camOffsetFromSnake);
