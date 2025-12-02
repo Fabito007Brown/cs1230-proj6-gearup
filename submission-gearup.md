@@ -6,27 +6,29 @@ The project handout can be found [here](https://cs1230.graphics/projects/realtim
 
 ## Gameplay + Physics + Integration Tests
 
-| Feature | Instructions | Expected Output | Your Output |
+| Feature | How to produce | Expected Output | Your Output |
 |--------|--------------|----------------|------------|
-| Physics – Translation Stability | Press **W** for ~8 seconds | Snake moves smoothly with consistent speed and no jitter | Video below |
-| Physics – Collision / Death Animation | Steer snake into a wall or a tree | Snake squashes horizontally and respawns after ~0.6s | Video below |
-| Growth from Food | Eat 3 food cubes in a row | New body segments spawn one-by-one and follow smoothly | Video below |
-| Door Opening Timing | Wait ~20s from start | Front door opens smoothly revealing the full path | *(Insert video below)* |
-| Camera Follow Mode | Press **C** to toggle follow camera | Camera locks behind snake head with smooth motion | Video below |
-| L-System Trees – Randomness | Start scene → observe 3 trees | Same overall structure but slightly different branches | *(Insert screenshot in this column)* |
-| L-System Path Strip | Walk halfway down the path | Even spacing of trees along edges | *(Insert screenshot in this column)* |
-| Full Gameplay Integration Test | Move around, eat food, die, respawn | All mechanics function together with stable framerate | Video below |
+| 1. Physics – Movement (Acceleration and Velocity) | Press **W** for ~5 seconds | Snake moves smoothly with increasing speed due to acceleration | Video below |
+| 2. Physics – Collision / Death Animation | Steer snake into a wall or a tree | Snake squashes horizontally and respawns | Video below |
+| 3. Growth from Food | Eat 3 food cubes in a row | New body segments spawn one-by-one and follow smoothly | Video below |
+| 4. Camera Follow Mode | Move the snake | Camera locks behind snake head with smooth motion | Video below |
+| 5. L-System Trees – Randomness | Start scene → observe 3 trees | Same overall structure but slightly different branches | ![Place lsystem_random.png in student_outputs/gearup folder](student_outputs/gearup/lsystem_random.png) |
+| 6. L-System Path Strip | Walk halfway down the path | Even spacing of trees along edges | ![Place lsystem_path.png in student_outputs/gearup folder](student_outputs/gearup/lsystem_path.png) |
+| 7. Physics - Full Gameplay Integration Test | Move around, eat food, die, respawn | All mechanics function together with stable framerate | Video below |
 
 ---
 
 ### Physics Videos
 
-> Place your recorded outputs here like Project 5 did:
-
+#### 1. Physics - Movement 
 https://github.com/user-attachments/assets/INSERT_TRANSLATION_VIDEO  
-https://github.com/user-attachments/assets/INSERT_DEATH_VIDEO  
+
+#### 2. Physics - Collision 
+https://github.com/user-attachments/assets/INSERT_DEATH_VIDEO 
+
+#### Growth from Food
 https://github.com/user-attachments/assets/INSERT_GROWTH_VIDEO  
-https://github.com/user-attachments/assets/INSERT_DOOR_VIDEO  
+
 https://github.com/user-attachments/assets/INSERT_CAMERA_VIDEO  
 https://github.com/user-attachments/assets/INSERT_FULLGAME_VIDEO  
 
