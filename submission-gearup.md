@@ -11,9 +11,9 @@ The project handout can be found [here](https://cs1230.graphics/projects/realtim
 | 1. Physics – Movement (Acceleration and Velocity) | Press **W** for ~5 seconds | Snake moves smoothly with increasing speed due to acceleration | Video below |
 | 2. Physics – Collision / Death Animation | Steer snake into a wall or a tree | Snake squashes horizontally and respawns | Video below |
 | 3. Growth from Food | Eat 3 food cubes in a row | New body segments spawn one-by-one and follow smoothly | Video below |
-| 4. Camera Follow Mode | Move the snake | Camera locks behind snake head with smooth motion | Video below |
-| 5. L-System Trees – Randomness | Start scene → observe 3 trees | Same overall structure but slightly different branches | ![Place lsystem_random.png in student_outputs/gearup folder](student_outputs/gearup/lsystem_random.png) |
-| 6. L-System Path Strip | Walk halfway down the path | Even spacing of trees along edges | ![Place lsystem_path.png in student_outputs/gearup folder](student_outputs/gearup/lsystem_path.png) |
+| 4. Camera Follow | Move the snake | Camera locks behind snake head with smooth motion | Video below |
+| 5. L-System Trees – Randomness | Start scene → observe 3 trees | Same overall structure but slightly different branches | <img width="148" height="218" alt="lsystem_random" src="https://github.com/user-attachments/assets/90770b37-f4bf-4dfc-9ec3-d374a06b9a67" /> |
+| 6. L-System Path Strip | Walk halfway down the path | Even spacing of trees along edges | <img width="1094" height="795" alt="lsystem_path" src="https://github.com/user-attachments/assets/3b423ebb-0838-43c3-9679-71a1a05324e6" /> |
 | 7. Physics - Full Gameplay Integration Test | Move around, eat food, die, respawn | All mechanics function together with stable framerate | Video below |
 
 ---
@@ -21,16 +21,22 @@ The project handout can be found [here](https://cs1230.graphics/projects/realtim
 ### Physics Videos
 
 #### 1. Physics - Movement 
-https://github.com/user-attachments/assets/INSERT_TRANSLATION_VIDEO  
+https://github.com/user-attachments/assets/360aca19-1c20-4719-a4ce-d1eb2e853634
+
 
 #### 2. Physics - Collision 
-https://github.com/user-attachments/assets/INSERT_DEATH_VIDEO 
+https://github.com/user-attachments/assets/22213884-ddb0-42cb-9b4a-1b3f49e64848
 
-#### Growth from Food
-https://github.com/user-attachments/assets/INSERT_GROWTH_VIDEO  
+#### 3. Growth from Food
+https://github.com/user-attachments/assets/0b946ba0-0914-44c7-b65c-e011f19a5220
 
-https://github.com/user-attachments/assets/INSERT_CAMERA_VIDEO  
-https://github.com/user-attachments/assets/INSERT_FULLGAME_VIDEO  
+#### 4. Camera Follow
+https://github.com/user-attachments/assets/71b0febc-b343-4791-9228-e621d3828025
+
+#### 7. Physics - Full Gameplay
+https://github.com/user-attachments/assets/cfc5ec84-2907-487b-9be0-92a68ab7454e
+
+
 
 ---
 
