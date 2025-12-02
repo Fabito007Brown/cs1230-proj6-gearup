@@ -4,16 +4,21 @@
 #ifdef __APPLE__
 #define GL_SILENCE_DEPRECATION
 #endif
+
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 
+#include <vector>
 #include <unordered_map>
+
 #include <QElapsedTimer>
 #include <QOpenGLWidget>
 #include <QTime>
 #include <QTimer>
 
 #include <algorithm>
+#include <string>
+
 #include "cube.h"
 #include "cone.h"
 #include "sphere.h"
@@ -22,11 +27,14 @@
 #include "camera.h"
 #include "scenedata.h"
 #include "sceneparser.h"
-
-
+#include "terraingenerator.h"
+#include <QImage>
+#include <deque>
+#include <QDebug>
 
 class Realtime : public QOpenGLWidget
 {
+    Q_OBJECT
 public:
     Realtime(QWidget *parent = nullptr);
     void finish();                                      // Called on program exit
@@ -34,8 +42,6 @@ public:
     void settingsChanged();
     void saveViewportImage(std::string filePath);
 
-public slots:
-    void tick(QTimerEvent* event);                      // Called once per tick of m_timer
 
 protected:
     void initializeGL() override;                       // Called once at the start of the program
@@ -43,6 +49,7 @@ protected:
     void resizeGL(int width, int height) override;      // Called when window size changes
 
 private:
+    // Input events
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -50,45 +57,170 @@ private:
     void mouseMoveEvent(QMouseEvent *event) override;
     void timerEvent(QTimerEvent *event) override;
 
-    // Tick Related Variables
-    int m_timer;                                        // Stores timer which attempts to run ~60 times per second
-    QElapsedTimer m_elapsedTimer;                       // Stores timer which keeps track of actual time between frames
+    // ========== Tick / input state ==========
+    int m_timer;                                        // ~60 Hz timer
+    QElapsedTimer m_elapsedTimer;                       // time between frames
 
-    // Input Related Variables
-    bool m_mouseDown = false;                           // Stores state of left mouse button
-    glm::vec2 m_prev_mouse_pos;                         // Stores mouse position
-    std::unordered_map<Qt::Key, bool> m_keyMap;         // Stores whether keys are pressed or not
+    bool m_mouseDown = false;
+    glm::vec2 m_prev_mouse_pos;
+    std::unordered_map<Qt::Key, bool> m_keyMap;
 
+    double m_devicePixelRatio = 1.0;
 
-    double m_devicePixelRatio;
-
+    // ========== Shaders ==========
     GLuint m_shader = 0;
 
+    // ========== Shape VAOs from scenefile (if used) ==========
     struct ShapeVAO {
-        GLuint vao;
-        GLuint vbo;
-        int vertexCount;
+        GLuint vao = 0;
+        GLuint vbo = 0;
+        int    vertexCount = 0;
     };
 
     std::vector<ShapeVAO> m_shapeVAOs;
-
 
     void loadScene();
     void generateShapeVAOs();
     void cleanupVAOs();
     std::vector<float> generateShapeData(PrimitiveType type, int param1, int param2);
 
-
-
-
-
-    Camera m_camera;
+    // ========== Camera ==========
+    Camera    m_camera;
     glm::vec3 m_camPos  = glm::vec3(0.f, 0.f, 5.f);
     glm::vec3 m_camLook = glm::vec3(0.f, 0.f, -1.f);
     glm::vec3 m_camUp   = glm::vec3(0.f, 1.f, 0.f);
 
-    // Parsed scene data from lab 4
+    // ========== Terrain ==========
+    TerrainGenerator m_terrainGenerator;
+    GLuint m_terrainVAO        = 0;
+    GLuint m_terrainVBO        = 0;
+    int    m_terrainVertexCount = 0;
+
+    void generateTerrain();
+    void cleanupTerrain();
+
+    // ========== Cube mesh re-used for walls/snake/etc. ==========
+    enum MaterialType {
+        MAT_DEFAULT = 0,
+        MAT_PATH    = 1,
+        MAT_WALL    = 2
+    };
+
+    struct CubeInstance {
+        glm::vec3 pos;
+        glm::vec3 scale;
+        glm::vec3 color;
+        int material = MAT_DEFAULT; // safe now, enum is above
+    };
+
+    GLuint m_cubeVAO        = 0;
+    GLuint m_cubeVBO        = 0;
+    int    m_cubeVertexCount = 0;
+
+    std::vector<CubeInstance> m_cubes;   // arena walls, props, etc.
+    bool cellBlocked(int gx, int gz) const;
+
+    // collision helpers
+    bool blockedAt(const glm::vec3 &p) const;
+    void openFrontDoor();
+
+    // door timer
+    bool  m_doorOpened    = false;
+    float m_doorTimer     = 0.f;
+    float m_doorOpenDelay = 20.f;  // seconds until door opens
+
+    bool  m_pathMode      = false; // later: when snake actually leaves arena
+
+    // Path geometry (Minecraft-y strip)
+    int   m_pathWidth    = 3;   // tiles wide (roughly -1..+1 in x)
+    int   m_pathLengthZ  = 40;  // how far it extends in -Z
+    int   m_pathStartZ   = -10; // first z row for the path, just outside z = -10 wall
+
+    // Camera follow
+    bool      m_followSnake      = true;
+    glm::vec3 m_camOffsetFromSnake;
+
+
+
+
+    GLuint m_wallDiffuseTex = 0;
+    GLuint m_wallNormalTex  = 0;
+
+    // --- Path normal-mapped brick textures ---
+    GLuint m_pathDiffuseTex = 0;
+    GLuint m_pathNormalTex  = 0;
+    float  m_pathUVScale    = 0.4f; // how “zoomed” the bricks are
+
+    GLuint loadTexture2D(const QString &path);
+
+
+    // --- Dead Snaek functionality ---
+    bool  m_snakeDead      = false;
+    float m_snakeDeathTime = 0.f;   // seconds since death
+    float m_snakeStartY    = 0.5f;  // baseline height
+
+
+    //L-system for flowers
+    void generateLSystemFoliageStrip(int zStart, int zEnd, bool leftSide);
+    void addLSystemPlant(float baseX, float baseZ);
+
+
+    // ----- Game mode -----
+    enum class GameMode { Arena, Path };
+    GameMode m_mode = GameMode::Arena;
+
+    void buildInitialPathStrip();   // builds the Minecraft-style path
+
+    void generateCubeMesh();
+    void cleanupCubeMesh();
+    void buildArenaLayout();
+
+    // ========== Snake (single rigid body cube) ==========
+    struct SnakeState {
+        glm::vec3 pos;   // world-space center
+        glm::vec3 vel;   // velocity (units / second)
+    };
+
+    // Simple snake body: positions of trailing cubes
+    std::vector<glm::vec3> m_snakeBody;
+
+    // High-resolution trail of head positions so body can follow
+    std::deque<glm::vec3> m_snakeTrail;
+    glm::vec3 m_lastTrailPos;
+    float m_trailAccumDist  = 0.f;
+    float m_trailSampleDist = 0.4f; // distance between trail samples
+
+    // Food
+
+    // Food
+    void resetSnake();
+
+
+
+    void spawnFood();
+    glm::vec3 m_foodPos;
+    bool      m_hasFood = false;
+    float     m_foodRadius = 0.6f; // collision radius
+
+    // --- Grass bump-mapped terrain textures ---
+    GLuint m_grassDiffuseTex = 0;
+    GLuint m_grassHeightTex  = 0;   // height / bump map
+    float  m_grassUVScale    = 0.35f; // tiling amount
+    float  m_grassBumpScale  = 10.0f; // how strong the bumps look
+
+
+
+    SnakeState m_snake;
+    float      m_snakeSpeed = 6.f;
+
+    // --- simple physics parameters for rigid-body translation ---
+    glm::vec3  m_snakeForceDir = glm::vec3(0.f); // direction from input
+    float      m_snakeMass      = 1.0f;
+    float      m_snakeForceMag  = 70.0f;         // how “strong” WASD is
+    float      m_snakeFriction  = 8.0f;          // velocity damping
+    float      m_snakeMaxSpeed  = 8.0f;
+
+    // Parsed scene data from lab 4 (still here if you ever load JSON)
     RenderData m_renderData;
-
-
 };
+

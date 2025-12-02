@@ -49,6 +49,7 @@ add_executable(${PROJECT_NAME}
     src/utils/cube.h src/utils/cube.cpp
     src/utils/cylinder.h src/utils/cylinder.cpp
     src/utils/sphere.h src/utils/sphere.cpp
+    src/terraingenerator.h src/terraingenerator.cpp
 )
 
 # GLM: this creates its library and allows you to `#include "glm/..."`
@@ -75,7 +76,30 @@ qt6_add_resources(${PROJECT_NAME} "Resources"
     FILES
         resources/shaders/default.frag
         resources/shaders/default.vert
+        resources/textures/brick_diffuse.jpg
+        resources/textures/brick_normal.jpg
+        resources/textures/Rock051_1K-JPG_Color.jpg
+        resources/textures/Rock051_1K-JPG_NormalGL.jpg
+        resources/textures/grass_color.jpg
+        resources/textures/grass_height.jpg
 )
+
+
+# adding textures
+file(GLOB TEXTURE_FILES
+    "resources/textures/*.png"
+    "resources/textures/*.jpg"
+)
+
+# Make Qt Creator show textures under a named group
+source_group("projects_realtime_other_files/resources/textures" FILES ${TEXTURE_FILES})
+
+
+# Copy textures into the build folder so loadTexture2D() can find them
+foreach(tex ${TEXTURE_FILES})
+    configure_file(${tex} ${CMAKE_CURRENT_BINARY_DIR}/resources/textures COPYONLY)
+endforeach()
+
 
 # GLEW: this provides support for Windows (including 64-bit)
 if (WIN32)

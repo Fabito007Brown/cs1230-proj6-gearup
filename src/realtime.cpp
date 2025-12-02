@@ -7,6 +7,15 @@
 #include "settings.h"
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
+#include "cube.h"
+#include <cmath>
+#include <cstdlib>   // for std::rand, RAND_MAX
+
+
+#include <string>
+#include <stack>
+#include <unordered_map>
+
 
 // ================== Rendering the Scene!
 
@@ -25,6 +34,28 @@ Realtime::Realtime(QWidget *parent)
     m_keyMap[Qt::Key_Space]   = false;
 
     // If you must use this function, do not edit anything above this
+
+    // FINAL PROJECT GEAR UP
+    // === Stage 1: basic terrain + snake setup (no GL calls here) ===
+    const int   gridWidth  = 30;
+    const int   gridDepth  = 30;
+    const float cellSize   = 1.f;
+
+
+    // If you must use this function, do not edit anything above this
+
+    // Default camera for our snake arena (no scenefile required)
+    m_camPos  = glm::vec3(0.f, 5.f, 10.f);
+    m_camLook = glm::normalize(glm::vec3(0.f, -0.4f, -1.f));
+    m_camUp   = glm::vec3(0.f, 1.f, 0.f);
+
+
+    // Snake (rigid body cube) initial state
+    m_snake.pos = glm::vec3(0.f, 0.5f, 0.f);  // sits on ground
+    m_snakeStartY = 0.5f;
+    m_snake.vel = glm::vec3(0.f);             // not moving until key press
+
+
 }
 
 void Realtime::finish() {
@@ -34,6 +65,8 @@ void Realtime::finish() {
     // Students: anything requiring OpenGL calls when the program exits should be done here
 
     cleanupVAOs();
+    cleanupTerrain();
+    cleanupCubeMesh();
     if (m_shader) glDeleteProgram(m_shader);
 
     this->doneCurrent();
@@ -161,6 +194,52 @@ void Realtime::cleanupVAOs() {
     m_shapeVAOs.clear();
 }
 
+void Realtime::resetSnake() {
+    m_snakeDead      = false;
+    m_snakeDeathTime = 0.f;
+
+    m_snakeForceDir = glm::vec3(0.f);
+
+    // Head
+    m_snake.pos = glm::vec3(0.f, 0.5f, 0.f);
+    m_snake.vel = glm::vec3(0.f);
+
+    // Body + trail
+    m_snakeBody.clear();
+    m_snakeTrail.clear();
+    m_snakeTrail.push_back(m_snake.pos);
+    m_lastTrailPos   = m_snake.pos;
+    m_trailAccumDist = 0.f;
+
+    // Give the player a new piece of food
+    spawnFood();
+}
+
+
+void Realtime::spawnFood() {
+    // Path is centered at x = 0, width = m_pathWidth tiles.
+    // Keep food safely inside the walkable strip.
+    float halfW = 0.5f * float(m_pathWidth) - 0.3f; // small margin from edges
+    if (halfW < 0.5f) {
+        halfW = 0.5f;
+    }
+
+    // Z goes along the strip from just past the door into the distance.
+    // Path rows go from m_pathStartZ down to m_pathStartZ - m_pathLengthZ.
+    float zNear = float(m_pathStartZ - 1);                 // just beyond the door
+    float zFar  = float(m_pathStartZ - m_pathLengthZ + 1); // not at the very end
+
+    // Two random numbers in [0,1]
+    float rx = float(std::rand()) / float(RAND_MAX);
+    float rz = float(std::rand()) / float(RAND_MAX);
+
+    float x = (rx * 2.f - 1.f) * halfW; // in [-halfW, +halfW]
+    float z = zNear + (zFar - zNear) * rz;
+
+    m_foodPos = glm::vec3(x, 0.5f, z);
+    m_hasFood = true;
+}
+
 
 
 void Realtime::initializeGL() {
@@ -177,7 +256,7 @@ void Realtime::initializeGL() {
     std::cout << "Initialized GL: Version " << glewGetString(GLEW_VERSION) << std::endl;
 
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
+    glDisable(GL_CULL_FACE);
     glViewport(0, 0, size().width() * m_devicePixelRatio, size().height() * m_devicePixelRatio);
 
     // Load shader
@@ -186,129 +265,725 @@ void Realtime::initializeGL() {
         ":/resources/shaders/default.frag"
         );
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    // Load brick diffuse + normal textures for the path
+    m_pathDiffuseTex = loadTexture2D(":/resources/textures/brick_diffuse.jpg");
+    m_pathNormalTex  = loadTexture2D(":/resources/textures/brick_normal.jpg");
+
+    // Load stone wall textures (Rock051)
+    m_grassDiffuseTex = loadTexture2D(":/resources/textures/grass_color.jpg");
+    m_grassHeightTex  = loadTexture2D(":/resources/textures/grass_height.jpg");
+
+    glClearColor(0.7f, 0.9f, 1.0f, 1.f); // soft sky blue
+
+
+    // === Stage 1: generate a flat voxel arena ===
+    // --- Crossy-Road style isometric-ish camera ---
+    m_camPos  = glm::vec3(15.f, 20.f, 15.f);           // up and off to the side
+    m_camLook = glm::normalize(glm::vec3(0.f) - m_camPos); // look toward origin
+    m_camUp   = glm::vec3(0.f, 1.f, 0.f);              // world up
+
+    float aspect = (size().height() > 0)
+                       ? float(size().width()) / float(size().height())
+                       : 1.f;
+    // Slightly narrower FOV for a "telephoto" feel
+    float fovY = glm::radians(40.f);
+
+    m_camera.setViewMatrix(m_camPos, m_camLook, m_camUp);
+    m_camera.setProjectionMatrix(aspect, settings.nearPlane, settings.farPlane, fovY);
+
+
+    // --- Generate a flat terrain so we see something ---
+    generateTerrain();
+    // --- Generate reusable cube mesh + arena walls ---
+    generateCubeMesh();
+    buildArenaLayout();
+
+    // Snake initial state
+    resetSnake();
+
+
+
+    //For camera movement stuff
+    m_camOffsetFromSnake = m_camPos - m_snake.pos;
+    m_followSnake        = true;
+
+    // Door / path state
+    m_doorOpened    = false;
+    m_doorTimer     = 0.f;
+    m_pathMode      = false;
+
+    m_pathWidth     = 3;    // tweak if you want a wider path
+    m_pathLengthZ   = 40;
+    m_pathStartZ    = -10;  // just beyond front wall at z = -10
+
+
+}
+
+
+GLuint Realtime::loadTexture2D(const QString &path)
+{
+    QImage img(path);
+    if (img.isNull()) {
+        qWarning() << "Failed to load texture:" << path;
+        return 0;
+    }
+
+    // Convert to RGBA8888 and flip vertically so it matches OpenGL's origin
+    QImage glImg = img.convertToFormat(QImage::Format_RGBA8888).mirrored();
+
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_RGBA,
+                 glImg.width(),
+                 glImg.height(),
+                 0,
+                 GL_RGBA,
+                 GL_UNSIGNED_BYTE,
+                 glImg.bits());
+
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return tex;
+}
+
+
+static std::string expandLSystem(const std::string &axiom,
+                                 const std::unordered_map<char, std::string> &rules,
+                                 int iterations)
+{
+    std::string current = axiom;
+    for (int i = 0; i < iterations; ++i) {
+        std::string next;
+        for (char c : current) {
+            auto it = rules.find(c);
+            if (it != rules.end()) {
+                next += it->second;   // rewrite using rule
+            } else {
+                next.push_back(c);    // keep as-is
+            }
+        }
+        current.swap(next);
+    }
+    return current;
+}
+
+
+void Realtime::addLSystemPlant(float baseX, float baseZ) {
+    using std::string;
+    using RuleMap = std::unordered_map<char, string>;
+
+    // Simple bush-like L-system:
+    // X -> F[+X]F[-X]FX
+    // F -> FF
+    RuleMap rules;
+    rules['X'] = "F[+X]F[-X]FX";
+    rules['F'] = "FF";
+
+    string axiom = "X";
+    string str   = expandLSystem(axiom, rules, 2);  // 2 iterations is plenty
+
+    glm::vec3 trunkColor(0.50f, 0.35f, 0.20f);
+    glm::vec3 leafColor (0.35f, 0.65f, 0.30f);
+
+    struct Turtle {
+        glm::vec3 pos;
+    };
+
+    Turtle t;
+    t.pos = glm::vec3(baseX, 0.4f, baseZ);   // base on the ground-ish
+
+    std::stack<Turtle> stack;
+
+    auto addCube = [&](const glm::vec3 &p, float h, const glm::vec3 &col) {
+        CubeInstance inst;
+        inst.pos   = glm::vec3(p.x, p.y + 0.5f * h, p.z);
+        inst.scale = glm::vec3(1.f, h, 1.f);
+        inst.color = col;
+        m_cubes.push_back(inst);
+    };
+
+    float segH = 0.35f; // segment height
+
+    for (char c : str) {
+        switch (c) {
+        case 'F':
+            // trunk / branch going upward
+            addCube(t.pos, segH, trunkColor);
+            t.pos.y += segH;
+            break;
+        case 'X':
+            // leaf blob at the tip
+            addCube(t.pos, segH, leafColor);
+            break;
+        case '+':
+            // small horizontal offset to one side
+            t.pos.x += 0.6f;
+            break;
+        case '-':
+            // small horizontal offset to the other side
+            t.pos.x -= 0.6f;
+            break;
+        case '[':
+            stack.push(t);
+            break;
+        case ']':
+            if (!stack.empty()) {
+                t = stack.top();
+                stack.pop();
+            }
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+
+void Realtime::generateLSystemFoliageStrip(int zStart, int zEnd, bool leftSide) {
+    // Distance from path center to where we plant bushes
+    float baseOffsetX = (m_pathWidth * 0.5f) + 3.f; // 1–2 blocks beyond the stone border
+
+    int step = 5; // spacing along the Z direction
+
+    for (int gz = zStart; gz >= zEnd; gz -= step) {
+        float x = leftSide ? -baseOffsetX : baseOffsetX;
+        addLSystemPlant(x, float(gz));
+    }
+}
+
+
+
+//PROJECT 6 GEAR UP
+void Realtime::generateTerrain() {
+    cleanupTerrain(); // in case we regenerate
+
+    int resolution = 100;   // 100 x 100 quads
+    float size     = 20.f;  // world-space width/depth
+
+    std::vector<float> vertexData = m_terrainGenerator.generateFlatGrid(resolution, size);
+    m_terrainVertexCount = static_cast<int>(vertexData.size() / 6); // 3 pos + 3 normal
+
+    glGenVertexArrays(1, &m_terrainVAO);
+    glGenBuffers(1, &m_terrainVBO);
+
+    glBindVertexArray(m_terrainVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_terrainVBO);
+    glBufferData(GL_ARRAY_BUFFER,
+                 vertexData.size() * sizeof(float),
+                 vertexData.data(),
+                 GL_STATIC_DRAW);
+
+    // position attribute (location = 0)
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
+                          6 * sizeof(float),
+                          (void*)0);
+
+    // normal attribute (location = 1)
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE,
+                          6 * sizeof(float),
+                          (void*)(3 * sizeof(float)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+void Realtime::cleanupTerrain() {
+    if (m_terrainVBO) {
+        glDeleteBuffers(1, &m_terrainVBO);
+        m_terrainVBO = 0;
+    }
+    if (m_terrainVAO) {
+        glDeleteVertexArrays(1, &m_terrainVAO);
+        m_terrainVAO = 0;
+    }
+    m_terrainVertexCount = 0;
+}
+
+// =================== CUBE MESH + ARENA LAYOUT ===================
+
+void Realtime::generateCubeMesh() {
+    cleanupCubeMesh();
+
+    Cube cube;
+    cube.updateParams(1, 1); // lowest tessellation; nice blocky cube
+    std::vector<float> data = cube.generateShape();
+    m_cubeVertexCount = static_cast<int>(data.size() / 6); // 3 pos + 3 normal
+
+    glGenVertexArrays(1, &m_cubeVAO);
+    glGenBuffers(1, &m_cubeVBO);
+
+    glBindVertexArray(m_cubeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_cubeVBO);
+
+    glBufferData(GL_ARRAY_BUFFER,
+                 data.size() * sizeof(float),
+                 data.data(),
+                 GL_STATIC_DRAW);
+
+    // position (location = 0)
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
+                          6 * sizeof(float),
+                          (void*)0);
+
+    // normal (location = 1)
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE,
+                          6 * sizeof(float),
+                          (void*)(3 * sizeof(float)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+void Realtime::cleanupCubeMesh() {
+    if (m_cubeVBO) {
+        glDeleteBuffers(1, &m_cubeVBO);
+        m_cubeVBO = 0;
+    }
+    if (m_cubeVAO) {
+        glDeleteVertexArrays(1, &m_cubeVAO);
+        m_cubeVAO = 0;
+    }
+    m_cubeVertexCount = 0;
+}
+
+
+bool Realtime::cellBlocked(int gx, int gz) const {
+    // Treat outside playable area as blocked too
+    float snakeRadius = 0.4f; // half-size of the snake cube in x/z
+
+    for (const CubeInstance &c : m_cubes) {
+        float hx = 0.5f * c.scale.x;
+        float hz = 0.5f * c.scale.z;
+
+        float dx = std::abs(float(gx) - c.pos.x);
+        float dz = std::abs(float(gz) - c.pos.z);
+
+        if (dx < hx + snakeRadius && dz < hz + snakeRadius) {
+            // Only *taller* cubes are solid. Low cubes (path floor) are walkable.
+            if (c.scale.y > 0.6f) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+
+
+void Realtime::buildArenaLayout() {
+    m_cubes.clear();
+
+    // Our terrain is size = 20.f, centered at origin => half extent = 10
+    const float half       = 10.f;
+    const float wallHeight = 2.f;   // a bit taller than the snake will be
+    const float unit       = 1.f;   // cube size along x/z
+
+    glm::vec3 wallColor(0.9f, 0.9f, 0.95f); // soft light gray/white
+
+    auto addCube = [&](float x, float z, float height,
+                       const glm::vec3 &color,
+                       int material = MAT_DEFAULT) {
+        CubeInstance inst;
+        inst.pos      = glm::vec3(x, height * 0.5f, z); // center at half height
+        inst.scale    = glm::vec3(unit, height, unit);
+        inst.color    = color;
+        inst.material = material;
+        m_cubes.push_back(inst);
+    };
+
+    // ---------- 1) BORDER WALLS (solid ring) ----------
+    for (float x = -half; x <= half; x += unit) {
+        // front & back walls – **no gap here**, door opens later in openFrontDoor()
+        addCube(x, -half, wallHeight, wallColor, MAT_WALL); // front (z = -10)
+        addCube(x,  half, wallHeight, wallColor, MAT_WALL); // back  (z = +10)
+    }
+
+    for (float z = -half; z <= half; z += unit) {
+        addCube(-half, z, wallHeight, wallColor, MAT_WALL); // left  (x = -10)
+        addCube( half, z, wallHeight, wallColor, MAT_WALL); // right (x = +10)
+    }
+
+    // ---------- 2) PATCHY NOISE-BASED INTERIOR ----------
+    glm::vec3 baseGrass(0.55f, 0.85f, 0.55f);
+    glm::vec3 dirt     (0.45f, 0.35f, 0.22f);
+
+    auto hash01 = [](int x, int z) {
+        float v = std::sin(x * 12.9898f + z * 78.233f) * 43758.5453f;
+        return v - std::floor(v);
+    };
+
+    const float centerClearRadius = 4.0f;  // always flat zone where snake can live
+    const float spawnProbability  = 0.45f; // ~45% of tiles get a column
+
+    for (int gz = -9; gz <= 9; ++gz) {
+        for (int gx = -9; gx <= 9; ++gx) {
+            float distCenter = std::sqrt(float(gx*gx + gz*gz));
+            if (distCenter < centerClearRadius)
+                continue;
+
+            // keep corridor clear in front of the door (z negative, centered in x)
+            if (std::abs(gx) <= 1 && gz <= -2 && gz >= -9)
+                continue;
+
+            float r = hash01(gx, gz);
+            if (r > spawnProbability)
+                continue;
+
+            float nx = gx * 0.35f;
+            float nz = gz * 0.35f;
+            float n  = 0.5f * std::sin(nx) + 0.5f * std::cos(nz);
+            n = 0.5f * (n + 1.f); // [0,1]
+
+            float height = 0.4f + 1.2f * n;
+
+            float t = std::clamp((height - 0.4f) / 1.2f, 0.f, 1.f);
+            glm::vec3 color = (1.f - t) * baseGrass + t * dirt;
+
+            addCube(float(gx), float(gz), height, color);
+        }
+    }
+}
+
+
+
+void Realtime::buildInitialPathStrip() {
+    // NOTE: do NOT clear m_cubes here; we keep the arena + hills.
+    const float unit      = 1.f;
+    const float halfWidth = m_pathWidth * 0.5f;  // half width of walkable strip
+
+    const float floorH    = 0.1f;   // low so it doesn't block in cellBlocked
+
+    glm::vec3 pathColor   (0.80f, 0.72f, 0.50f);  // dirt-ish
+    glm::vec3 edgeStone   (0.70f, 0.70f, 0.78f);  // stone edge
+    glm::vec3 foliageGreen(0.45f, 0.70f, 0.40f);  // leafy blocks
+
+    auto addCube = [&](float x, float yHeight, float z,
+                       const glm::vec3 &color, int material) {
+        CubeInstance inst;
+        inst.pos     = glm::vec3(x, yHeight * 0.5f, z);
+        inst.scale   = glm::vec3(unit, yHeight, unit);
+        inst.color   = color;
+        inst.material = material; // 0 = default, 1 = path floor
+        m_cubes.push_back(inst);
+    };
+
+
+    // Build a straight strip going in -Z direction starting just outside the door
+    int zStart = m_pathStartZ;                 // e.g. -11
+    int zEnd   = m_pathStartZ - m_pathLengthZ; // e.g. -51
+
+    for (int gz = zStart; gz >= zEnd; --gz) {
+        for (int gx = -10; gx <= 10; ++gx) {
+            // Inside walkable path (center strip)  ---> material 1 (normal-mapped bricks)
+            if (std::abs(gx) <= halfWidth) {
+                addCube(float(gx), floorH, float(gz), pathColor, /*material=*/1);
+            }
+            // stone borders (no normal map)       ---> material 0
+            else if (std::abs(gx) == int(halfWidth) + 1) {
+                addCube(float(gx), floorH + 0.6f, float(gz), edgeStone, /*material=*/0);
+            }
+            // foliage / trees (no normal map)     ---> material 0
+            else if (std::abs(gx) > int(halfWidth) + 1) {
+                float v = std::sin(gx * 12.9898f + gz * 78.233f) * 43758.5453f;
+                float r = v - std::floor(v);
+                if (r < 0.25f) {
+                    float h = 1.4f + 0.8f * r;
+                    addCube(float(gx), h, float(gz), foliageGreen, /*material=*/0);
+                }
+            }
+
+        }
+    }
+
+    // Add L-system “trees / bushes” along both sides of the path
+    generateLSystemFoliageStrip(zStart, zEnd, /*leftSide=*/true);
+    generateLSystemFoliageStrip(zStart, zEnd, /*leftSide=*/false);
+}
+
+void Realtime::openFrontDoor() {
+    if (m_doorOpened) return;
+    m_doorOpened = true;
+
+    // Arena extent must match buildArenaLayout
+    const float half      = 10.f;
+    const float doorZ     = -half;       // front wall (same side as path: m_pathStartZ = -10)
+    const float doorXStart = -1.5f;      // centered opening
+    const float doorXEnd   =  1.5f;
+    const float zEpsilon   = 0.5f;
+
+    for (CubeInstance &c : m_cubes) {
+        bool onFrontWall = std::abs(c.pos.z - doorZ) < zEpsilon;
+        bool inDoorSpan  = (c.pos.x >= doorXStart && c.pos.x <= doorXEnd);
+
+        if (onFrontWall && inDoorSpan && c.scale.y > 0.f) {
+            // “remove” the cube by shrinking its height
+            c.scale.y = 0.f;
+        }
+    }
 }
 
 
 void Realtime::paintGL() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
     if (!m_shader) return;
 
     glUseProgram(m_shader);
 
+    // --- material & texture uniforms ---
+    GLint useBlockyLoc       = glGetUniformLocation(m_shader, "useBlocky");
+    GLint useNormalMapLoc    = glGetUniformLocation(m_shader, "useNormalMap");
+    GLint usePathMaterialLoc = glGetUniformLocation(m_shader, "usePathMaterial");
+    GLint pathUVScaleLoc     = glGetUniformLocation(m_shader, "pathUVScale");
 
+    // UV scale for brick tiling
+    glUniform1f(pathUVScaleLoc, m_pathUVScale);
+
+    // Bind brick textures to texture units 0 and 1
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_pathDiffuseTex);
+    glUniform1i(glGetUniformLocation(m_shader, "pathDiffuseMap"), 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_pathNormalTex);
+    glUniform1i(glGetUniformLocation(m_shader, "pathNormalMap"), 1);
+
+
+
+    //GRASSS
+    // NEW: bind grass textures to units 2 and 3
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_grassDiffuseTex);
+    glUniform1i(glGetUniformLocation(m_shader, "grassDiffuseMap"), 2);
+
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_grassHeightTex);
+    glUniform1i(glGetUniformLocation(m_shader, "grassHeightMap"), 3);
+
+    // UV + bump strength
+    glUniform1f(glGetUniformLocation(m_shader, "grassUVScale"),  m_grassUVScale);
+    glUniform1f(glGetUniformLocation(m_shader, "grassBumpScale"), m_grassBumpScale);
+
+    GLint useGrassBumpLoc = glGetUniformLocation(m_shader, "useGrassBump");
+
+
+
+
+
+    // --- camera matrices ---
     glm::mat4 view = m_camera.getViewMatrix();
     glm::mat4 proj = m_camera.getProjMatrix();
-
-    GLint viewLoc = glGetUniformLocation(m_shader, "view");
-    GLint projLoc = glGetUniformLocation(m_shader, "proj");
-    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
-    glUniformMatrix4fv(projLoc, 1, GL_FALSE, &proj[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(m_shader, "view"),
+                       1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(m_shader, "proj"),
+                       1, GL_FALSE, &proj[0][0]);
 
     // --- camera position ---
-    GLint camPosLoc = glGetUniformLocation(m_shader, "camPos");
-    glUniform3fv(camPosLoc, 1, &m_camPos[0]);
+    glUniform3fv(glGetUniformLocation(m_shader, "camPos"),
+                 1, &m_camPos[0]);
 
-    // --- global coefficients ---
-    const SceneGlobalData &G = m_renderData.globalData;
-    glUniform1f(glGetUniformLocation(m_shader, "k_a"), G.ka);
-    glUniform1f(glGetUniformLocation(m_shader, "k_d"), G.kd);
-    glUniform1f(glGetUniformLocation(m_shader, "k_s"), G.ks);
+    // --- global lighting coeffs ---
+    float ka = 0.2f, kd = 0.8f, ks = 0.3f;
+    glUniform1f(glGetUniformLocation(m_shader, "k_a"), ka);
+    glUniform1f(glGetUniformLocation(m_shader, "k_d"), kd);
+    glUniform1f(glGetUniformLocation(m_shader, "k_s"), ks);
 
+    // --- one directional light ---
+    auto loc0 = [&](const std::string &field) {
+        std::string name = "lights[0]." + field;
+        return glGetUniformLocation(m_shader, name.c_str());
+    };
+    glUniform1i(glGetUniformLocation(m_shader, "numLights"), 1);
 
-    // --- lights ---
-    int numLights = std::min<int>(m_renderData.lights.size(), 8);
-    glUniform1i(glGetUniformLocation(m_shader, "numLights"), numLights);
+    int typeDir = 1;
+    glm::vec3 lightColor(1.f, 1.f, 1.f);
+    glm::vec3 lightDir = glm::normalize(glm::vec3(-1.f, -1.f, -1.f));
+    glm::vec3 lightPos(0.f);            // unused for directional
+    glm::vec3 atten(1.f, 0.f, 0.f);     // no falloff
 
-    for (int i = 0; i < numLights; ++i) {
-        const SceneLightData &L = m_renderData.lights[i];
+    glUniform1i(loc0("type"), typeDir);
+    glUniform3fv(loc0("color"), 1, &lightColor[0]);
+    glUniform3fv(loc0("pos"),   1, &lightPos[0]);
+    glUniform3fv(loc0("dir"),   1, &lightDir[0]);
+    glUniform3fv(loc0("atten"), 1, &atten[0]);
+    glUniform1f(loc0("angle"),    0.f);
+    glUniform1f(loc0("penumbra"), 0.f);
 
-        // 0 point, 1 directional, 2 spot
-        int typeInt = 0;
-        if (L.type == LightType::LIGHT_DIRECTIONAL) typeInt = 1;
-        else if (L.type == LightType::LIGHT_SPOT)  typeInt = 2;
+    // ---------- TERRAIN (no blocky effect, no textures) ----------
+    // ---------- TERRAIN (bump-mapped grass) ----------
+    glUniform1i(useBlockyLoc,       0);
+    glUniform1i(usePathMaterialLoc, 0);
+    glUniform1i(useNormalMapLoc,    0);
 
+    // NEW: enable bump mapping for terrain
+    glUniform1i(useGrassBumpLoc, 1);
 
-        auto loc = [&](const std::string &field) {
-            std::string name = "lights[" + std::to_string(i) + "]." + field;
-            return glGetUniformLocation(m_shader, name.c_str());
-        };
+    if (m_terrainVAO && m_terrainVertexCount > 0) {
+        glm::mat4 model(1.f);
+        glUniformMatrix4fv(glGetUniformLocation(m_shader, "model"),
+                           1, GL_FALSE, &model[0][0]);
 
-        glUniform1i(loc("type"), typeInt);
-        glUniform3fv(loc("color"), 1, &glm::vec3(L.color)[0]);
-        glUniform3fv(loc("pos"),   1, &glm::vec3(L.pos)[0]);
-        glUniform3fv(loc("dir"),   1, &glm::vec3(L.dir)[0]);
-        glUniform3fv(loc("atten"), 1, &glm::vec3(L.function)[0]);
-        glUniform1f(loc("angle"),      L.angle);
-        glUniform1f(loc("penumbra"),   L.penumbra);
-    }
-
-    // single point light: use first light in the scene
-    GLint lightPosLoc   = glGetUniformLocation(m_shader, "lightPos");
-    GLint lightColorLoc = glGetUniformLocation(m_shader, "lightColor");
-
-    glm::vec3 lightPos(5.f, 5.f, 5.f);
-    glm::vec3 lightCol(1.f, 1.f, 1.f);
-
-    if (!m_renderData.lights.empty()) {
-        const SceneLightData &L0 = m_renderData.lights[0];
-        lightPos = glm::vec3(L0.pos);
-        lightCol = glm::vec3(L0.color);
-    }
-
-    glUniform3fv(lightPosLoc,   1, &lightPos[0]);
-    glUniform3fv(lightColorLoc, 1, &lightCol[0]);
-
-
-    for (size_t i = 0; i < m_renderData.shapes.size(); i++) {
-        const RenderShapeData &shape = m_renderData.shapes[i];
-        const ShapeVAO &vao = m_shapeVAOs[i];
-
-        // model matrix
-        GLint modelLoc = glGetUniformLocation(m_shader, "model");
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &shape.ctm[0][0]);
-
-        // material
-        const SceneMaterial &mat = shape.primitive.material;
-
-        glm::vec3 cA = glm::vec3(mat.cAmbient);
-        glm::vec3 cD = glm::vec3(mat.cDiffuse);
-        glm::vec3 cS = glm::vec3(mat.cSpecular);
-
+        // These will still be used as "base" values, but diffuse will get overridden
+        glm::vec3 cA(0.35f, 0.55f, 0.35f);
+        glm::vec3 cD(0.55f, 0.85f, 0.55f);
+        glm::vec3 cS(0.04f, 0.04f, 0.04f);
         glUniform3fv(glGetUniformLocation(m_shader, "cAmbient"),  1, &cA[0]);
         glUniform3fv(glGetUniformLocation(m_shader, "cDiffuse"),  1, &cD[0]);
         glUniform3fv(glGetUniformLocation(m_shader, "cSpecular"), 1, &cS[0]);
-        glUniform1f(glGetUniformLocation(m_shader, "shininess"),  mat.shininess);
+        glUniform1f(glGetUniformLocation(m_shader, "shininess"),  6.f);
 
-        // draw
-        glBindVertexArray(vao.vao);
-        glDrawArrays(GL_TRIANGLES, 0, vao.vertexCount);
+        glBindVertexArray(m_terrainVAO);
+        glDrawArrays(GL_TRIANGLES, 0, m_terrainVertexCount);
+        glBindVertexArray(0);
+    }
+
+
+    // ---------- ARENA WALL CUBES + PATH (blocky) ----------
+    glUniform1i(useGrassBumpLoc,   0);
+    glUniform1i(useBlockyLoc, 1);
+
+    if (m_cubeVAO && m_cubeVertexCount > 0) {
+        for (const CubeInstance &inst : m_cubes) {
+            // Skip "deleted" cubes (e.g., door pieces) so they don't cause seams
+            if (inst.scale.y <= 0.f) continue;
+
+            // === material flags: 1 = path bricks, 0 = normal cube ===
+            bool isPathFloor = (inst.material == 1);
+
+            glUniform1i(usePathMaterialLoc, isPathFloor ? 1 : 0);
+            glUniform1i(useNormalMapLoc,
+                        (isPathFloor && m_pathNormalTex != 0) ? 1 : 0);
+
+            glm::mat4 model = glm::translate(glm::mat4(1.f), inst.pos)
+                              * glm::scale(glm::mat4(1.f), inst.scale);
+            glUniformMatrix4fv(glGetUniformLocation(m_shader, "model"),
+                               1, GL_FALSE, &model[0][0]);
+
+            glm::vec3 cD = inst.color;
+            glm::vec3 cA = 0.6f * cD;
+            glm::vec3 cS(0.08f, 0.08f, 0.08f);
+            glUniform3fv(glGetUniformLocation(m_shader, "cAmbient"),  1, &cA[0]);
+            glUniform3fv(glGetUniformLocation(m_shader, "cDiffuse"),  1, &cD[0]);
+            glUniform3fv(glGetUniformLocation(m_shader, "cSpecular"), 1, &cS[0]);
+            glUniform1f(glGetUniformLocation(m_shader, "shininess"), 10.f);
+
+            glBindVertexArray(m_cubeVAO);
+            glDrawArrays(GL_TRIANGLES, 0, m_cubeVertexCount);
+            glBindVertexArray(0);
+        }
+
+        // ---------- SNAKE (single rigid-body cube, blocky, NO normal map) ----------
+        // ---------- SNAKE HEAD (single rigid-body cube, blocky, NO normal map) ----------
+        glUniform1i(usePathMaterialLoc, 0);
+        glUniform1i(useNormalMapLoc,    0);
+
+        float baseScale = 0.8f;
+        float scaleY    = baseScale;
+        float scaleXZ   = baseScale;
+
+        if (m_snakeDead) {
+            float t = glm::clamp(m_snakeDeathTime / 0.5f, 0.f, 1.f);
+            scaleY  = baseScale * (1.f - t);
+            scaleXZ = baseScale * (1.f + 0.4f * t);
+        }
+
+        glm::mat4 snakeModel =
+            glm::translate(glm::mat4(1.f), m_snake.pos) *
+            glm::scale(glm::mat4(1.f), glm::vec3(scaleXZ, scaleY, scaleXZ));
+
+        glUniformMatrix4fv(glGetUniformLocation(m_shader, "model"),
+                           1, GL_FALSE, &snakeModel[0][0]);
+
+        glm::vec3 headD(1.0f, 0.9f, 0.2f);
+        glm::vec3 headA = 0.6f * headD;
+        glm::vec3 headS(0.12f, 0.12f, 0.12f);
+
+        glUniform3fv(glGetUniformLocation(m_shader, "cAmbient"),  1, &headA[0]);
+        glUniform3fv(glGetUniformLocation(m_shader, "cDiffuse"),  1, &headD[0]);
+        glUniform3fv(glGetUniformLocation(m_shader, "cSpecular"), 1, &headS[0]);
+        glUniform1f(glGetUniformLocation(m_shader, "shininess"),  18.f);
+
+        glBindVertexArray(m_cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, m_cubeVertexCount);
+
+        // ---------- SNAKE BODY SEGMENTS ----------
+        for (const glm::vec3 &segPos : m_snakeBody) {
+            glm::mat4 bodyModel =
+                glm::translate(glm::mat4(1.f), segPos) *
+                glm::scale(glm::mat4(1.f), glm::vec3(0.7f, 0.7f, 0.7f));
+
+            glUniformMatrix4fv(glGetUniformLocation(m_shader, "model"),
+                               1, GL_FALSE, &bodyModel[0][0]);
+
+            glm::vec3 bodyD(0.95f, 0.8f, 0.2f); // slightly dimmer yellow
+            glm::vec3 bodyA = 0.6f * bodyD;
+            glm::vec3 bodyS(0.10f, 0.10f, 0.10f);
+            glUniform3fv(glGetUniformLocation(m_shader, "cAmbient"),  1, &bodyA[0]);
+            glUniform3fv(glGetUniformLocation(m_shader, "cDiffuse"),  1, &bodyD[0]);
+            glUniform3fv(glGetUniformLocation(m_shader, "cSpecular"), 1, &bodyS[0]);
+            glUniform1f(glGetUniformLocation(m_shader, "shininess"),  12.f);
+
+            glDrawArrays(GL_TRIANGLES, 0, m_cubeVertexCount);
+        }
+
+        // ---------- FOOD ----------
+        if (m_hasFood) {
+            glm::mat4 foodModel =
+                glm::translate(glm::mat4(1.f), m_foodPos) *
+                glm::scale(glm::mat4(1.f), glm::vec3(0.6f, 0.6f, 0.6f));
+
+            glUniformMatrix4fv(glGetUniformLocation(m_shader, "model"),
+                               1, GL_FALSE, &foodModel[0][0]);
+
+            glm::vec3 fd(0.95f, 0.25f, 0.25f); // reddish fruit
+            glm::vec3 fa = 0.6f * fd;
+            glm::vec3 fs(0.12f, 0.12f, 0.12f);
+            glUniform3fv(glGetUniformLocation(m_shader, "cAmbient"),  1, &fa[0]);
+            glUniform3fv(glGetUniformLocation(m_shader, "cDiffuse"),  1, &fd[0]);
+            glUniform3fv(glGetUniformLocation(m_shader, "cSpecular"), 1, &fs[0]);
+            glUniform1f(glGetUniformLocation(m_shader, "shininess"),  20.f);
+
+            glDrawArrays(GL_TRIANGLES, 0, m_cubeVertexCount);
+        }
+
         glBindVertexArray(0);
     }
 
     glUseProgram(0);
 }
 
+
+
+
+
 void Realtime::resizeGL(int w, int h) {
-    // Tells OpenGL how big the screen is
-    glViewport(0, 0, size().width() * m_devicePixelRatio, size().height() * m_devicePixelRatio);
+    glViewport(0, 0,
+               size().width() * m_devicePixelRatio,
+               size().height() * m_devicePixelRatio);
 
-    // Students: anything requiring OpenGL calls when the program starts should be done here
-
-    // Keep camera projection in sync with window size
     float aspect = (h > 0) ? float(w) / float(h) : 1.f;
-    float fovY = !m_renderData.shapes.empty()
-                     ? m_renderData.cameraData.heightAngle
-                     : 45.f * 3.1415926535f / 180.f;
+    float fovY      = glm::radians(45.f);
+    float nearPlane = 0.1f;
+    float farPlane  = 100.f;
 
-    m_camera.setProjectionMatrix(
-        aspect,
-        settings.nearPlane,
-        settings.farPlane,
-        fovY
-        );
+    m_camera.setProjectionMatrix(aspect, nearPlane, farPlane, fovY);
 }
+
 
 void Realtime::sceneChanged() {
     makeCurrent();
@@ -362,11 +1037,33 @@ static glm::vec3 rotateAroundAxis(const glm::vec3 &v,
 
 
 void Realtime::keyPressEvent(QKeyEvent *event) {
-    m_keyMap[Qt::Key(event->key())] = true;
+    Qt::Key key = Qt::Key(event->key());
+
+    // WASD control snake direction (velocity)
+    if (key == Qt::Key_W) {
+        m_snakeForceDir = glm::vec3(0.f, 0.f, -1.f); // forward (-Z)
+    } else if (key == Qt::Key_S) {
+        m_snakeForceDir = glm::vec3(0.f, 0.f,  1.f); // back (+Z)
+    } else if (key == Qt::Key_A) {
+        m_snakeForceDir = glm::vec3(-1.f, 0.f, 0.f); // left (-X)
+    } else if (key == Qt::Key_D) {
+        m_snakeForceDir = glm::vec3( 1.f, 0.f, 0.f); // right (+X)
+    } else {
+        m_keyMap[key] = true;
+    }
 }
 
 void Realtime::keyReleaseEvent(QKeyEvent *event) {
-    m_keyMap[Qt::Key(event->key())] = false;
+    Qt::Key key = Qt::Key(event->key());
+    m_keyMap[key] = false;
+
+    // If all WASD are up, stop applying input force
+    if (!m_keyMap[Qt::Key_W] &&
+        !m_keyMap[Qt::Key_A] &&
+        !m_keyMap[Qt::Key_S] &&
+        !m_keyMap[Qt::Key_D]) {
+        m_snakeForceDir = glm::vec3(0.f);
+    }
 }
 
 void Realtime::mousePressEvent(QMouseEvent *event) {
@@ -383,6 +1080,11 @@ void Realtime::mouseReleaseEvent(QMouseEvent *event) {
 }
 
 void Realtime::mouseMoveEvent(QMouseEvent *event) {
+
+    if (m_followSnake) {
+        // Ignore manual orbit when camera is locked onto the snake
+        return;
+    }
     if (m_mouseDown) {
         int posX = event->position().x();
         int posY = event->position().y();
@@ -425,44 +1127,125 @@ void Realtime::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void Realtime::timerEvent(QTimerEvent *event) {
-    int elapsedms   = m_elapsedTimer.elapsed();
+    Q_UNUSED(event);
+
+    int   elapsedms = m_elapsedTimer.elapsed();
     float deltaTime = elapsedms * 0.001f;
     m_elapsedTimer.restart();
 
-    // Use deltaTime and m_keyMap here to move around
+    // =========================
+    // 1) Snake update (only if ALIVE)
+    // =========================
+    if (!m_snakeDead) {
+        // --- 1a) Integrate phsyics motion ---
+        // Forces
+        glm::vec3 F_input = m_snakeForceDir * m_snakeForceMag;
+        glm::vec3 F_fric  = -m_snake.vel * m_snakeFriction;   // velocity damping
+        glm::vec3 F_total = F_input + F_fric;
 
-    const float speed = 5.f; // world units per second
+        // Acceleration
+        glm::vec3 a = F_total / m_snakeMass;
 
-    glm::vec3 forward = glm::normalize(m_camLook);
-    glm::vec3 right   = glm::normalize(glm::cross(forward, m_camUp));
-    glm::vec3 worldUp(0.f, 1.f, 0.f);
+        // Integrate velocity and clamp speed
+        m_snake.vel += a * deltaTime;
 
-    glm::vec3 moveDir(0.f);
+        float speed = glm::length(m_snake.vel);
+        if (speed > m_snakeMaxSpeed) {
+            m_snake.vel = (m_snake.vel / speed) * m_snakeMaxSpeed;
+        }
 
-    // W/S: along look direction
-    if (m_keyMap[Qt::Key_W]) moveDir += forward;
-    if (m_keyMap[Qt::Key_S]) moveDir -= forward;
+        // Integrate position
+        glm::vec3 proposed = m_snake.pos + m_snake.vel * deltaTime;
+        proposed.y = 0.5f; // keep snake on the ground plane
 
-    // A/D: strafe left/right
-    if (m_keyMap[Qt::Key_D]) moveDir += right;
-    if (m_keyMap[Qt::Key_A]) moveDir -= right;
+        int gx = std::round(proposed.x);
+        int gz = std::round(proposed.z);
 
-    // Space / Ctrl: vertical in world space
-    if (m_keyMap[Qt::Key_Space])   moveDir += worldUp;
-    if (m_keyMap[Qt::Key_Control]) moveDir -= worldUp;
+        if (!cellBlocked(gx, gz)) {
+            m_snake.pos = proposed;
+        } else {
+            // hit wall / hill => die and start squash timer
+            m_snakeDead      = true;
+            m_snakeDeathTime = 0.f;
+        }
 
-    if (glm::length(moveDir) > 0.f) {
-        moveDir = glm::normalize(moveDir);
-        m_camPos += moveDir * speed * deltaTime;
+        // --- 1b) Update head trail ---
+        float stepDist = glm::length(m_snake.pos - m_lastTrailPos);
+        m_trailAccumDist += stepDist;
+        if (m_trailAccumDist >= m_trailSampleDist) {
+            m_snakeTrail.push_front(m_snake.pos);
+            m_lastTrailPos   = m_snake.pos;
+            m_trailAccumDist = 0.f;
 
-        // Push updated camera to Camera object
+            // keep trail reasonably short
+            size_t maxTrail = (m_snakeBody.size() + 5) * 8;
+            while (m_snakeTrail.size() > maxTrail) {
+                m_snakeTrail.pop_back();
+            }
+        }
+
+        // --- 1c) Position body segments along the trail ---
+        for (size_t i = 0; i < m_snakeBody.size(); ++i) {
+            size_t idx = (i + 1) * 6; // spacing along trail
+            if (idx < m_snakeTrail.size()) {
+                m_snakeBody[i] = m_snakeTrail[idx];
+            } else {
+                m_snakeBody[i] = m_snake.pos;
+            }
+        }
+
+        // --- 1d) Food collision ---
+        if (m_hasFood) {
+            float d = glm::length(m_snake.pos - m_foodPos);
+            if (d < m_foodRadius) {
+                // grow: add one segment at the end
+                glm::vec3 newSegPos = m_snake.pos;
+                if (!m_snakeBody.empty())
+                    newSegPos = m_snakeBody.back();
+                m_snakeBody.push_back(newSegPos);
+
+                m_hasFood = false;
+                spawnFood();
+            }
+        }
+    } else {
+        // =========================
+        // Snake is DEAD -> play squash, then respawn
+        // =========================
+        m_snakeDeathTime += deltaTime;
+        if (m_snakeDeathTime > 0.6f) {   // same timing as your squash in paintGL
+            resetSnake();                // puts snake back in center + clears body + food
+        }
+    }
+
+    // =========================
+    // 2) Door timer / path generation (ALWAYS runs)
+    // =========================
+    if (!m_doorOpened) {
+        m_doorTimer += deltaTime;
+        if (m_doorTimer >= m_doorOpenDelay) {
+            openFrontDoor();          // removes cubes in front wall at z = -10
+            buildInitialPathStrip();  // lays down the Minecraft-style strip + trees
+            m_pathMode = true;
+        }
+    }
+
+    // =========================
+    // 3) Optional: camera follow
+    // =========================
+    if (m_followSnake) {
+        m_camPos  = m_snake.pos + m_camOffsetFromSnake;
+        m_camLook = glm::normalize(-m_camOffsetFromSnake);
+        m_camUp   = glm::vec3(0.f, 1.f, 0.f);
         m_camera.setViewMatrix(m_camPos, m_camLook, m_camUp);
     }
 
     update();
-
-
 }
+
+
+
+
 
 // DO NOT EDIT
 void Realtime::saveViewportImage(std::string filePath) {
