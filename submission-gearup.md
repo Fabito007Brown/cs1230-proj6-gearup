@@ -47,11 +47,11 @@ https://github.com/user-attachments/assets/cfc5ec84-2907-487b-9be0-92a68ab7454e
 
 | Input Scene / Setting | How to Produce Output | Expected Output | Your Output |
 |---|---|---|---|
-| Normal Mapping ON – Brick Cube | Load `brick_normalmap_test.json` → Save `brick_nm_on.png` | Bricks show visible micro-surface detail under lighting | ![Place brick_nm_on.png in student_outputs](student_outputs/brick_nm_on.png) |
-| Normal Mapping OFF – Brick Cube | Toggle **N** → Save `brick_nm_off.png` | Flat shading → grooves disappear | ![Place brick_nm_off.png in student_outputs](student_outputs/brick_nm_off.png) |
+| Normal Mapping ON – Brick Cube | Load `brick_normalmap_test.json` → Save `brick_nm_on.png` | Bricks show visible micro-surface detail under lighting | |
+| Normal Mapping in Game – Brick Path | N/A | N/A | |
 | Grass Bump Mapping | Load `grass_bump_test.json` → Save `grass_bump.png` | Grass shows subtle height changes (not flat) | ![Place grass_bump.png in student_outputs](student_outputs/grass_bump.png) |
-| Normal Mapping Light Proof | Rotate camera around cube → Save `brick_shading.png` | Highlights shift per-pixel across brick | ![Place brick_shading.png in student_outputs](student_outputs/brick_shading.png) |
-| Tree Shading / Geometry Test | Load `lsystem_only.json` → Save `lsystem_test.png` | Procedural branches visible + shadows correct | ![Place lsystem_test.png in student_outputs](student_outputs/lsystem_test.png) |
+| L-system Tall tree | N/A | Tall Blocky L-system tree | |
+| L-system Wide and Tall tree | N/A | Tall and wide blocky L-system tree | |
 
 ---
 

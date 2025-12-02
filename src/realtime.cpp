@@ -379,7 +379,12 @@ static std::string expandLSystem(const std::string &axiom,
 }
 
 
-void Realtime::addLSystemPlant(float baseX, float baseZ) {
+// Generic version used for both the 3-tree scene and the tall-tree scene
+void Realtime::addLSystemPlantCustom(float baseX, float baseZ,
+                                     int iterations,
+                                     float segH,
+                                     float horizStep)
+{
     using std::string;
     using RuleMap = std::unordered_map<char, string>;
 
@@ -391,7 +396,7 @@ void Realtime::addLSystemPlant(float baseX, float baseZ) {
     rules['F'] = "FF";
 
     string axiom = "X";
-    string str   = expandLSystem(axiom, rules, 2);  // 2 iterations is plenty
+    string str   = expandLSystem(axiom, rules, iterations);
 
     glm::vec3 trunkColor(0.50f, 0.35f, 0.20f);
     glm::vec3 leafColor (0.35f, 0.65f, 0.30f);
@@ -410,10 +415,10 @@ void Realtime::addLSystemPlant(float baseX, float baseZ) {
         inst.pos   = glm::vec3(p.x, p.y + 0.5f * h, p.z);
         inst.scale = glm::vec3(1.f, h, 1.f);
         inst.color = col;
+        // if CubeInstance has a material field, you can default it:
+        // inst.material = 0;
         m_cubes.push_back(inst);
     };
-
-    float segH = 0.35f; // segment height
 
     for (char c : str) {
         switch (c) {
@@ -428,11 +433,11 @@ void Realtime::addLSystemPlant(float baseX, float baseZ) {
             break;
         case '+':
             // small horizontal offset to one side
-            t.pos.x += 0.6f;
+            t.pos.x += horizStep;
             break;
         case '-':
             // small horizontal offset to the other side
-            t.pos.x -= 0.6f;
+            t.pos.x -= horizStep;
             break;
         case '[':
             stack.push(t);
@@ -447,6 +452,138 @@ void Realtime::addLSystemPlant(float baseX, float baseZ) {
             break;
         }
     }
+}
+
+// Old convenience wrapper used by the arena + 3-tree test
+void Realtime::addLSystemPlant(float baseX, float baseZ)
+{
+    // Your original settings: 2 iters, segH = 0.35, horizStep = 0.6
+    addLSystemPlantCustom(baseX, baseZ, 2, 0.35f, 0.6f);
+}
+
+void Realtime::buildLSystemTestScene(bool singleTall)
+{
+    // Clear out gameplay stuff so it doesn't interfere
+    m_cubes.clear();
+    m_snakeBody.clear();
+    m_hasFood   = false;
+    m_snakeDead = false;
+
+    // --- Camera: nice angle for screenshot ---
+    m_camPos = glm::vec3(0.f, 10.f, 20.f);
+    m_camera.setViewMatrix(
+        m_camPos,
+        glm::vec3(0.f, 4.f, 0.f),   // look toward center
+        glm::vec3(0.f, 1.f, 0.f)
+        );
+
+    // --- Simple flat platform under the tree(s) ---
+    // 11x11 grid of flat tiles centered at origin
+    for (int x = -5; x <= 5; ++x) {
+        for (int z = -5; z <= 5; ++z) {
+            CubeInstance tile;
+            tile.pos   = glm::vec3((float)x, 0.f, (float)z);
+            tile.scale = glm::vec3(1.f, 0.2f, 1.f);
+            tile.color = glm::vec3(0.25f, 0.80f, 0.45f); // green-ish
+            // tile.material = 0; // if you have this field
+            m_cubes.push_back(tile);
+        }
+    }
+
+    // --- Trees from the REAL L-system ---
+    if (singleTall) {
+        // One taller tree in the middle: more iterations + taller segments
+        addLSystemPlantCustom(
+            /*baseX*/ 0.f,
+            /*baseZ*/ 0.f,
+            /*iterations*/ 3,     // 2 -> 3 makes it noticeably taller
+            /*segH*/      0.45f,  // slightly taller segments
+            /*horizStep*/ 0.6f
+            );
+    } else {
+        // Your original 3-tree arrangement, using the default parameters
+        addLSystemPlant(-4.f, 0.f);
+        addLSystemPlant( 0.f, 0.f);
+        addLSystemPlant( 4.f, 0.f);
+    }
+
+    update(); // trigger redraw
+}
+
+// 3-tree version (what you already had conceptually)
+void Realtime::buildLSystemOnlyScene()
+{
+    buildLSystemTestScene(false);
+}
+
+// 1 tall tree version for the test screenshot
+void Realtime::buildLSystemTallTreeScene()
+{
+    buildLSystemTestScene(true);
+}
+
+void Realtime::buildLSystemTallWideTreeScene()
+{
+    // Clear gameplay stuff so it doesn't interfere
+    m_cubes.clear();
+    m_snakeBody.clear();
+    m_hasFood   = false;
+    m_snakeDead = false;
+
+    // --- Camera: same nice angle as the other L-system tests ---
+    m_camPos = glm::vec3(0.f, 10.f, 20.f);
+    m_camera.setViewMatrix(
+        m_camPos,
+        glm::vec3(0.f, 4.f, 0.f),   // look toward center
+        glm::vec3(0.f, 1.f, 0.f)
+        );
+
+    // --- Simple flat platform under the tree ---
+    for (int x = -5; x <= 5; ++x) {
+        for (int z = -5; z <= 5; ++z) {
+            CubeInstance tile;
+            tile.pos   = glm::vec3((float)x, 0.f, (float)z);
+            tile.scale = glm::vec3(1.f, 0.2f, 1.f);
+            tile.color = glm::vec3(0.25f, 0.80f, 0.45f);
+            // tile.material = 0; // if you have a material field
+            m_cubes.push_back(tile);
+        }
+    }
+
+    // --- Single tall tree with LONGER branches ---
+    //    (same L-system rules, just different parameters)
+    addLSystemPlantCustom(
+        /*baseX*/    0.f,
+        /*baseZ*/    0.f,
+        /*iterations*/ 3,      // same as tall tree
+        /*segH*/      0.45f,   // tall-ish segments
+        /*horizStep*/ 1.0f     // BIGGER sideways step = longer branches
+        );
+
+    update();
+}
+
+
+
+void Realtime::buildGrassBumpTestScene() {
+    // Clear any existing cubes
+    m_cubes.clear();
+
+
+    // Turn off snake follow so camera doesn't get overridden
+    m_followSnake = false;
+
+    // Place camera looking at the cube
+    // In switchToBrickTestScene()
+    m_camPos  = glm::vec3(0.f, 10.f, 0.2f);
+
+    // Instead of looking STRAIGHT DOWN, tilt forward toward +Z
+    m_camLook = glm::vec3(0.f, -0.8f, 0.4f);
+
+    // Up stays world-up-ish
+    m_camUp   = glm::vec3(0.f, 1.f, 0.f);
+
+    m_camera.setViewMatrix(m_camPos, m_camLook, m_camUp);
 }
 
 
@@ -716,6 +853,59 @@ void Realtime::buildInitialPathStrip() {
     generateLSystemFoliageStrip(zStart, zEnd, /*leftSide=*/false);
 }
 
+
+
+void Realtime::buildNormalMapTestScene() {
+    // Clear any existing cubes
+    m_cubes.clear();
+
+    // One big cube at origin that uses the PATH material (normal-mapped bricks)
+    CubeInstance inst;
+    inst.pos      = glm::vec3(0.f, 0.f, 0.f);
+    inst.scale    = glm::vec3(4.f, 4.f, 4.f); // nice big cube
+    inst.color    = glm::vec3(1.f, 1.f, 1.f); // white so brick texture shows clearly
+    inst.material = MAT_PATH;                 // <-- uses brick diffuse + normal map
+    m_cubes.push_back(inst);
+
+    // Turn off snake follow so camera doesn't get overridden
+    m_followSnake = false;
+
+    // Place camera looking at the cube
+    // In switchToBrickTestScene()
+    m_camPos   = glm::vec3(0.f, 10.f, 0.2f);
+    m_camLook  = glm::vec3(0.f, -1.f, 0.f);
+    m_camUp    = glm::vec3(0.f, 0.f, 1.f);
+
+    m_camera.setViewMatrix(m_camPos, m_camLook, m_camUp);
+}
+
+
+void Realtime::rebuildMainArenaScene() {
+    // Restore original arena + snake + camera so you can keep playing
+    m_cubes.clear();
+    buildArenaLayout();
+
+    // Reset door/path state
+    m_doorOpened  = false;
+    m_doorTimer   = 0.f;
+    m_pathMode    = false;
+
+    // Reset snake + food
+    resetSnake();
+
+    // Back to Crossy-Road camera
+    m_camPos  = glm::vec3(15.f, 20.f, 15.f);
+    m_camLook = glm::normalize(glm::vec3(0.f) - m_camPos);
+    m_camUp   = glm::vec3(0.f, 1.f, 0.f);
+    m_camera.setViewMatrix(m_camPos, m_camLook, m_camUp);
+
+    // Follow snake again
+    m_camOffsetFromSnake = m_camPos - m_snake.pos;
+    m_followSnake        = true;
+}
+
+
+
 void Realtime::openFrontDoor() {
     if (m_doorOpened) return;
     m_doorOpened = true;
@@ -824,11 +1014,13 @@ void Realtime::paintGL() {
     glUniform1f(loc0("angle"),    0.f);
     glUniform1f(loc0("penumbra"), 0.f);
 
+
+
     // ---------- TERRAIN (no blocky effect, no textures) ----------
     // ---------- TERRAIN (bump-mapped grass) ----------
     glUniform1i(useBlockyLoc,       0);
     glUniform1i(usePathMaterialLoc, 0);
-    glUniform1i(useNormalMapLoc,    0);
+    // glUniform1i(useNormalMapLoc,    0);
 
     // NEW: enable bump mapping for terrain
     glUniform1i(useGrassBumpLoc, 1);
@@ -1038,6 +1230,56 @@ static glm::vec3 rotateAroundAxis(const glm::vec3 &v,
 
 void Realtime::keyPressEvent(QKeyEvent *event) {
     Qt::Key key = Qt::Key(event->key());
+
+    // Debug / test scenes
+    if (key == Qt::Key_B) {
+        // B = Brick normal-map test cube
+        buildNormalMapTestScene();
+        update();
+        return;
+    }
+    if (key == Qt::Key_L) {
+        // L = three-tree L-system scene (what you had)
+        buildLSystemOnlyScene();
+        update();
+        return;
+    }
+
+    if (key == Qt::Key_T) {
+        // T = single tall L-system tree scene for testing
+        buildLSystemTallTreeScene();
+        update();
+        return;
+    }
+
+    // NEW: save grass bump-mapping screenshot
+    if (key == Qt::Key_G) {
+        // NEW: grass bump-mapping test view
+        buildGrassBumpTestScene();
+        update();
+        return;
+    }
+
+
+    if (key == Qt::Key_Y) {
+        // Y = tall tree with long branches
+        buildLSystemTallWideTreeScene();
+        update();
+        return;
+    }
+
+    if (key == Qt::Key_R) {
+        // R = Return to main arena game
+        rebuildMainArenaScene();
+        update();
+        return;
+    }
+
+    if (event->key() == Qt::Key_N) {
+        m_useNormalMap = !m_useNormalMap;
+        std::cout << "useNormalMap = " << m_useNormalMap << std::endl;
+        update();  // repaint
+    }
 
     // WASD control snake direction (velocity)
     if (key == Qt::Key_W) {

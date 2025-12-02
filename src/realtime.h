@@ -35,6 +35,7 @@
 class Realtime : public QOpenGLWidget
 {
     Q_OBJECT
+    bool m_useNormalMap = true;
 public:
     Realtime(QWidget *parent = nullptr);
     void finish();                                      // Called on program exit
@@ -162,7 +163,14 @@ private:
 
     //L-system for flowers
     void generateLSystemFoliageStrip(int zStart, int zEnd, bool leftSide);
-    void addLSystemPlant(float baseX, float baseZ);
+    void addLSystemPlant(float baseX, float baseZ);                // existing
+    void addLSystemPlantCustom(float baseX, float baseZ,
+                               int iterations,
+                               float segH,
+                               float horizStep);
+    void buildLSystemTestScene(bool singleTall);
+    void buildLSystemOnlyScene();      // 3 trees (old behavior)
+    void buildLSystemTallTreeScene();  // 1 tall tree
 
 
     // ----- Game mode -----
@@ -222,5 +230,15 @@ private:
 
     // Parsed scene data from lab 4 (still here if you ever load JSON)
     RenderData m_renderData;
+
+
+    //FOR TESTING:
+    void buildNormalMapTestScene();   // big brick cube in front of camera
+    void rebuildMainArenaScene();     // back to normal game
+    void buildLSystemTallWideTreeScene();
+    void buildGrassBumpTestScene();
+
+
+    bool m_enablePathNormalMap = true;
 };
 
