@@ -47,55 +47,14 @@ https://github.com/user-attachments/assets/cfc5ec84-2907-487b-9be0-92a68ab7454e
 
 | Input Scene / Setting | How to Produce Output | Expected Output | Your Output |
 |---|---|---|---|
-| Normal Mapping ON – Brick Cube | Load `brick_normalmap_test.json` → Save `brick_nm_on.png` | Bricks show visible micro-surface detail under lighting | |
-| Normal Mapping in Game – Brick Path | N/A | N/A | |
-| Grass Bump Mapping | Load `grass_bump_test.json` → Save `grass_bump.png` | Grass shows subtle height changes (not flat) | ![Place grass_bump.png in student_outputs](student_outputs/grass_bump.png) |
-| L-system Tall tree | N/A | Tall Blocky L-system tree | |
-| L-system Wide and Tall tree | N/A | Tall and wide blocky L-system tree | |
+| Normal Mapping ON – Brick Cube | Load `brick_normalmap_test.json` → Save `brick_nm_on.png` | Bricks show visible micro-surface detail under lighting | <img width="611" height="600" alt="normal_map" src="https://github.com/user-attachments/assets/df473fb2-63ec-4081-8fa3-91dca62b28f8" /> |
+| Normal Mapping in Game – Brick Path | N/A | N/A | <img width="252" height="154" alt="Normal Mapping Game" src="https://github.com/user-attachments/assets/3ae59a38-f1a0-4df6-8df3-b6cdf6b74b5e" />|
+| Grass Bump Mapping | Load `grass_bump_test.json` → Save `grass_bump.png` | Grass shows subtle height changes (not flat) | <img width="798" height="597" alt="bump mapping from top" src="https://github.com/user-attachments/assets/51105783-4d3d-4f64-8d26-a146bb9b921c" />|
+| L-system Tall tree | N/A | Tall Blocky L-system tree | <img width="745" height="567" alt="larger L-system" src="https://github.com/user-attachments/assets/ee1f326c-050b-4876-a851-4bc7c3295bf4" />|
+| L-system Wide and Tall tree | N/A | Tall and wide blocky L-system tree |  <img width="793" height="597" alt="tall-wide l-system" src="https://github.com/user-attachments/assets/c030ae49-a594-4a87-af98-20dffdffa783" />|
 
 ---
 
-
-# EVERYTHING BELOW IS PROJECT 5
-
-#### Camera Translation
-
-
-
-##### Expected Output
-
-https://github.com/BrownCSCI1230/projects_realtime_template/assets/45575415/710ff8b4-6db4-445b-811d-f6c838741e67
-
-##### Your Output
-
-
-
-https://github.com/user-attachments/assets/e4ba8c11-4078-4b26-aacc-592b53f83ee8
-
-
-
-<!---
-Paste your output on top of this comment!
--->
-
-#### Camera Rotation
-
-_Instructions:_ Load `chess.json`. Take a look around!
-
-##### Expected Output
-
-https://github.com/BrownCSCI1230/projects_realtime_template/assets/45575415/a14f4d32-88ee-4f5f-9843-74dd5c89b9dd
-
-##### Your Output
-
-
-
-https://github.com/user-attachments/assets/e8c9d857-3c10-4459-92c2-9cc513667cbf
-
-
-<!---
-Paste your output on top of this comment!
--->
 
 ### Design Choices
 - Pipeline Structure & Code Reuse: I built on top of the existing architecture from previous labs. The tessellation code for cube, cone, cylinder, and sphere, as well as the scene parsing logic, were reused and integrated into the realtime OpenGL pipeline.
